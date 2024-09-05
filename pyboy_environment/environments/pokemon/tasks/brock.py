@@ -16,6 +16,8 @@ class PokemonBrock(PokemonEnvironment):
         emulation_speed: int = 0,
         headless: bool = False,
     ) -> None:
+        # Initialize the set to track discovered locations
+        self.discovered_locations = set()
 
         valid_actions: list[WindowEvent] = [
             WindowEvent.PRESS_ARROW_DOWN,
@@ -49,11 +51,21 @@ class PokemonBrock(PokemonEnvironment):
 
     def _get_state(self) -> np.ndarray:
         # Implement your state retrieval logic here
+        location = self._get_location()
         game_stats = self._generate_game_stats()
         return [game_stats["badges"]]
 
     def _calculate_reward(self, new_state: dict) -> float:
-        # Implement your reward calculation logic here
+        # Retrieve the current location
+        current_location = self._get_location()
+
+        # Check if the current location is new
+        if (current_location["x"], current_location["y"], current_location["map_id"]) not in self.discovered_locations:
+            self.discovered_locations.add((current_location["x"], current_location["y"], current_location["map_id"]))
+            # Reward the agent with 1 point for finding a new location
+            return 1.0
+        
+        # Otherwise, the reward is based on badges as before
         return new_state["badges"] - self.prior_game_stats["badges"]
 
     def _check_if_done(self, game_stats: dict[str, any]) -> bool:
@@ -62,6 +74,4 @@ class PokemonBrock(PokemonEnvironment):
 
     def _check_if_truncated(self, game_stats: dict) -> bool:
         # Implement your truncation check logic here
-
-        # Maybe if we run out of pokeballs...? or a max step count
         return self.steps >= 1000
