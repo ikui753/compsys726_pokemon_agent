@@ -18,6 +18,7 @@ class PokemonBrock(PokemonEnvironment):
     ) -> None:
         # Initialize the set to track discovered locations
         self.discovered_locations = set()
+        self.discovered_maps = set()
 
         valid_actions: list[WindowEvent] = [
             WindowEvent.PRESS_ARROW_DOWN,
@@ -59,14 +60,23 @@ class PokemonBrock(PokemonEnvironment):
         # Retrieve the current location
         current_location = self._get_location()
 
-        # Check if the current location is new
-        if (current_location["x"], current_location["y"], current_location["map_id"]) not in self.discovered_locations:
-            self.discovered_locations.add((current_location["x"], current_location["y"], current_location["map_id"]))
-            # Reward the agent with 1 point for finding a new location
-            return 1.0
+        # Check if the agent is in a new map
+        if current_location["map"] not in self.discovered_maps:
+            self.discovered_maps.add(current_location["map"])
+            return 5.0  # Reward for discovering a new map
+
+        # Check if the specific location (x, y) on the map is new
+        location_tuple = (current_location["x"], current_location["y"], current_location["map"])
+        if location_tuple not in self.discovered_locations:
+            self.discovered_locations.add(location_tuple)
+            return 1.0  # Reward for discovering a new location within the same map
+
+        # If neither the map nor the location is new, return no reward
+        return 0.0
+
         
         # Otherwise, the reward is based on badges as before
-        return new_state["badges"] - self.prior_game_stats["badges"]
+        #return new_state["badges"] - self.prior_game_stats["badges"]
 
     def _check_if_done(self, game_stats: dict[str, any]) -> bool:
         # Setting done to true if agent beats first gym (temporary)
