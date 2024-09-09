@@ -54,29 +54,44 @@ class PokemonBrock(PokemonEnvironment):
         # Implement your state retrieval logic here
         location = self._get_location()
         game_stats = self._generate_game_stats()
+        game_area = self.game_area()
         return [game_stats["badges"]]
 
     def _calculate_reward(self, new_state: dict) -> float:
-        # Retrieve the current location
+        # Retrieve the current location and store in a tuple 
+        # input("pause")       
         current_location = self._get_location()
+        location_tuple = (current_location["x"], current_location["y"], current_location["map"])
+        # print(f"{current_location['x']}, {current_location['y']} - {current_location['map']}")
+
+        # If the current map is "OAKS_LAB"
+        # if current_location['map'] == 'OAKS_LAB,':
+        #     # input("pause")
+        #     # Get the minimum y value from discovered locations in "OAKS_LAB"
+        #     max_y = 0
+        #     for loc in self.discovered_locations:
+        #         if loc[2] == "OAKS_LAB,":
+        #             max_y = max(max_y, loc[1])
+            
+        #     # If current y is less than the minimum y value discovered
+        #     if current_location["y"] > max_y:
+        #         # Add location to discovered locations
+        #         self.discovered_locations.add(location_tuple)
+        #         print("Found new lowest loc")
+        #         return 3.0  # Higher reward for discovering a new lowest location
 
         # Check if the agent is in a new map
         if current_location["map"] not in self.discovered_maps:
             self.discovered_maps.add(current_location["map"])
-            return 5.0  # Reward for discovering a new map
+            return 10.0  # Reward for discovering a new map
 
         # Check if the specific location (x, y) on the map is new
-        location_tuple = (current_location["x"], current_location["y"], current_location["map"])
         if location_tuple not in self.discovered_locations:
             self.discovered_locations.add(location_tuple)
             return 1.0  # Reward for discovering a new location within the same map
 
         # If neither the map nor the location is new, return no reward
         return 0.0
-
-        
-        # Otherwise, the reward is based on badges as before
-        #return new_state["badges"] - self.prior_game_stats["badges"]
 
     def _check_if_done(self, game_stats: dict[str, any]) -> bool:
         # Setting done to true if agent beats first gym (temporary)
