@@ -8,7 +8,6 @@ from pyboy_environment.environments.pokemon.pokemon_environment import (
 )
 from pyboy_environment.environments.pokemon import pokemon_constants as pkc
 
-
 class PokemonBrock(PokemonEnvironment):
     def __init__(
         self,
@@ -19,6 +18,7 @@ class PokemonBrock(PokemonEnvironment):
         # Initialize the set to track discovered locations
         self.discovered_locations = set()
         self.discovered_maps = set()
+        self.previous_location = None  # Track the previous location
 
         valid_actions: list[WindowEvent] = [
             WindowEvent.PRESS_ARROW_DOWN,
@@ -51,63 +51,45 @@ class PokemonBrock(PokemonEnvironment):
         )
 
     def _get_state(self) -> np.ndarray:
-        # Implement your state retrieval logic here
-        location = self._get_location()
+        # Retrieve the current game state
         game_stats = self._generate_game_stats()
-        game_area = self.game_area()
         return [game_stats["badges"]]
 
     def _calculate_reward(self, new_state: dict) -> float:
-        # Retrieve the current location and store in a tuple 
-        # input("pause")       
-        current_location = self._get_location()
-        location_tuple = (current_location["x"], current_location["y"], current_location["map"])
-        # print(f"{current_location['x']}, {current_location['y']} - {current_location['map']}")
+        # Get the current location
+        current_location = new_state["location"]
 
-        # Check if the agent is in a new map
-        if current_location["map"] not in self.discovered_maps:
-            self.discovered_maps.add(current_location["map"])
-            print(f"{current_location['map']}")
-            return 10.0  # Reward for discovering a new map
+        # Compare with previous location
+        if self.previous_location is not None and current_location == self.previous_location:
+            reward = -1.0  # Penalize if staying in the same location
 
-        # If the current map is "OAKS_LAB"
-        if current_location['map'] == 'OAKS_LAB,':
-            # input("pause")
-            # Get the maximum y value from discovered locations in "OAKS_LAB"
-            max_y = 0
-            for loc in self.discovered_locations:
-                if loc[2] == "OAKS_LAB,":
-                    max_y = max(max_y, loc[1])
-            
-            # If current y is less than the minimum y value discovered
-            if current_location["y"] > max_y:
-                # Add location to discovered locations
+        # if location already visited, penalise
+        # if current_location in self.discovered_locations:
+        #     reward = -1.0
+        else:
+            # Reward logic for discovering new map or new location
+            location_tuple = (current_location["x"], current_location["y"], current_location["map"])
+
+            if current_location["map"] not in self.discovered_maps:
+                self.discovered_maps.add(current_location["map"])
+                print(f"Discovered new map: {current_location['map']}")
+                reward = 500.0  # Reward for discovering a new map
+            elif location_tuple not in self.discovered_locations:
                 self.discovered_locations.add(location_tuple)
-                print("Found new lowest loc")
-                return 3.0  # Higher reward for discovering a new lowest location
-        
-        elif current_location["map"] == 'PALLET_TOWN,':
-            min_y = 0
-            for loc in self.discovered_locations:
-                if loc[2] == "PALLET_TOWN,":
-                    min_y = min(min_y, loc[1])
-            if current_location["y"] < min_y:
-                self.discovered_locations.add(location_tuple)
-                print("Found new highest loc")
-                return 3.0 # higher reward for discovering a new highest location
-            
-        # Check if the specific location (x, y) on the map is new
-        if location_tuple not in self.discovered_locations:
-            self.discovered_locations.add(location_tuple)
-            return 1.0  # Reward for discovering a new location within the same map
+                print(f"Discovered new location: {location_tuple}")
+                reward = 100.0  # Reward for discovering a new location
+            else:
+                reward = 0.0  # No reward if the location is not new
 
-        # If neither the map nor the location is new, return no reward
-        return 0.0
+            # Update the previous location
+            self.previous_location = current_location
+
+        return reward
 
     def _check_if_done(self, game_stats: dict[str, any]) -> bool:
-        # Setting done to true if agent beats first gym (temporary)
+        # Setting done to true if the agent beats the first gym
         return game_stats["badges"] > self.prior_game_stats["badges"]
 
     def _check_if_truncated(self, game_stats: dict) -> bool:
-        # Implement your truncation check logic here
+        # End the game if too many steps are taken
         return self.steps >= 1000
