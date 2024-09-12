@@ -1,11 +1,7 @@
 from functools import cached_property
-
 import numpy as np
 from pyboy.utils import WindowEvent
-
-from pyboy_environment.environments.pokemon.pokemon_environment import (
-    PokemonEnvironment,
-)
+from pyboy_environment.environments.pokemon.pokemon_environment import PokemonEnvironment
 from pyboy_environment.environments.pokemon import pokemon_constants as pkc
 
 class PokemonBrock(PokemonEnvironment):
@@ -18,6 +14,7 @@ class PokemonBrock(PokemonEnvironment):
         # Initialize the set to track discovered locations
         self.discovered_locations = set()
         self.discovered_maps = set()
+        self.start_location = None  # Track the start location
         self.previous_location = None  # Track the previous location
         self.previous_num_locs = 0  # Track the previous number of discovered locations
 
@@ -54,20 +51,51 @@ class PokemonBrock(PokemonEnvironment):
     def _get_state(self) -> np.ndarray:
         # Retrieve the current game state
         game_stats = self._generate_game_stats()
-        # print(game_stats["game_area"])
-        num_locs = len(self.discovered_locations)
-        
-        # Return 0 if the number of locations hasn't changed
-        if num_locs == self.previous_num_locs:
-            return [0]
+        current_location = game_stats["location"]
+
+        # # If the start_location is None (first discovery of a new map), set it
+        # if self.start_location is None:
+        #     self.start_location = (current_location["x"], current_location["y"])
+
+        # Compute Euclidean distance from the start location
+        if self.start_location:
+            start_x, start_y = self.start_location
+            current_x, current_y = current_location["x"], current_location["y"]
+            distance = np.sqrt((current_x - start_x) ** 2 + (current_y - start_y) ** 2)
         else:
-            self.previous_num_locs = num_locs  # Update the previous number of locations
-            return [num_locs]
+            distance = 0.0  # Default to 0 if there's no start location
+
+        # Convert game_stats to a flat list or array and prepend the distance
+        state_array = [
+            distance, # distance from start
+            game_stats["party_size"],
+            len(game_stats["pokemon"]),  # Assuming pokemon is a list
+            np.mean(game_stats["levels"]),  # Example: mean level of pokemon
+            np.mean(game_stats["hp"]),  # Example: mean hp of pokemon
+            np.mean(game_stats["xp"]),  # Example: mean xp of pokemon
+            np.mean(game_stats["status"]),  # Example: mean status of pokemon
+            game_stats["badges"],
+            game_stats["caught_pokemon"],
+            game_stats["seen_pokemon"],
+            game_stats["money"]
+        ]
+        
+        return state_array
 
     def _calculate_reward(self, new_state: dict) -> float:
         # Get the current location
         current_location = new_state["location"]
         location_tuple = (current_location["x"], current_location["y"], current_location["map"])
+
+        reward = 0.0 # initialise reward as 0
+
+        # Calculate distance traveled if start_location is set
+        if self.start_location:
+            start_x, start_y = self.start_location
+            current_x, current_y = current_location["x"], current_location["y"]
+            distance = np.sqrt((current_x - start_x) ** 2 + (current_y - start_y) ** 2)
+        else:
+            distance = 0.0
 
         # if location hasn't changed, penalise
         if current_location == self.previous_location:
@@ -76,10 +104,12 @@ class PokemonBrock(PokemonEnvironment):
         elif location_tuple in self.discovered_locations:
             reward = -1.0  # Penalize for visiting the same location
         else:
-            # Reward logic for discovering new map or new location that is not oak's lab
-            if current_location["map"] not in self.discovered_maps and current_location["map"] is not "OAKS_LAB,":
+            # Reward logic for discovering new map or new location
+            if current_location["map"] not in self.discovered_maps and current_location["map"] != "OAKS_LAB,":
                 self.discovered_maps.add(current_location["map"])
                 print(f"Discovered new map: {current_location['map']}")
+                # Set the start_location for the new map
+                self.start_location = (current_location["x"], current_location["y"])
                 reward = 10000.0  # Reward for discovering a new map
             else:
                 self.discovered_locations.add(location_tuple)
@@ -88,8 +118,10 @@ class PokemonBrock(PokemonEnvironment):
 
         # Update the previous location
         self.previous_location = current_location
+        
+        # reward greater distance
+        reward += distance
         return reward
-
 
     def _check_if_done(self, game_stats: dict[str, any]) -> bool:
         # Setting done to true if the agent beats the first gym
