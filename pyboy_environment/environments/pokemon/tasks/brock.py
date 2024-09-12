@@ -17,6 +17,8 @@ class PokemonBrock(PokemonEnvironment):
         self.start_location = None  # Track the start location
         self.previous_location = None  # Track the previous location
         self.previous_num_locs = 0  # Track the previous number of discovered locations
+        self.max_dist = 0
+        self.prev_distance = 0
 
         valid_actions: list[WindowEvent] = [
             WindowEvent.PRESS_ARROW_DOWN,
@@ -52,10 +54,9 @@ class PokemonBrock(PokemonEnvironment):
         # Retrieve the current game state
         game_stats = self._generate_game_stats()
         current_location = game_stats["location"]
-
-        # # If the start_location is None (first discovery of a new map), set it
-        # if self.start_location is None:
-        #     self.start_location = (current_location["x"], current_location["y"])
+        # If the start_location is None (first discovery of a new map), set it
+        if self.start_location is None:
+            self.start_location = (current_location["x"], current_location["y"])
 
         # Compute Euclidean distance from the start location
         if self.start_location:
@@ -70,10 +71,10 @@ class PokemonBrock(PokemonEnvironment):
             distance, # distance from start
             game_stats["party_size"],
             len(game_stats["pokemon"]),  # Assuming pokemon is a list
-            np.mean(game_stats["levels"]),  # Example: mean level of pokemon
-            np.mean(game_stats["hp"]),  # Example: mean hp of pokemon
-            np.mean(game_stats["xp"]),  # Example: mean xp of pokemon
-            np.mean(game_stats["status"]),  # Example: mean status of pokemon
+            # np.mean(game_stats["levels"]),  # Example: mean level of pokemon
+            # np.mean(game_stats["hp"]),  # Example: mean hp of pokemon
+            # np.mean(game_stats["xp"]),  # Example: mean xp of pokemon
+            # np.mean(game_stats["status"]),  # Example: mean status of pokemon
             game_stats["badges"],
             game_stats["caught_pokemon"],
             game_stats["seen_pokemon"],
@@ -99,10 +100,10 @@ class PokemonBrock(PokemonEnvironment):
 
         # if location hasn't changed, penalise
         if current_location == self.previous_location:
-            reward = -10.0
+            reward = -0.1
         # if location already visited, penalise
         elif location_tuple in self.discovered_locations:
-            reward = -1.0  # Penalize for visiting the same location
+            reward = -0.01  # Penalize for visiting the same location
         else:
             # Reward logic for discovering new map or new location
             if current_location["map"] not in self.discovered_maps and current_location["map"] != "OAKS_LAB,":
@@ -110,17 +111,27 @@ class PokemonBrock(PokemonEnvironment):
                 print(f"Discovered new map: {current_location['map']}")
                 # Set the start_location for the new map
                 self.start_location = (current_location["x"], current_location["y"])
-                reward = 10000.0  # Reward for discovering a new map
-            else:
-                self.discovered_locations.add(location_tuple)
-                print(f"Discovered new location: {location_tuple}")
-                reward = 1000.0  # Reward for discovering a new location
+                print(self.start_location)
+                self.max_dist = 0 # reset distance
+                reward = 10.0  # Reward for discovering a new map
 
         # Update the previous location
         self.previous_location = current_location
         
-        # reward greater distance
-        reward += distance
+        # reward greater distance, penalise same distance
+        if distance == self.prev_distance:
+            reward = -1.0
+            print(self.start_location)
+            print(current_location)
+            print(distance)
+        elif distance > self.max_dist:
+            reward += 10.0 # achieved new distance, give reward
+            reward += distance # still reward bigger distances
+        elif distance < self.max_dist:
+            reward += 5.0
+            reward += distance
+
+        self.prev_distance = distance
         return reward
 
     def _check_if_done(self, game_stats: dict[str, any]) -> bool:
