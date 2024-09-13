@@ -102,25 +102,25 @@ class PokemonBrock(PokemonEnvironment):
         else:
             if current_location["map"] not in self.discovered_maps:
                 self.discovered_maps.add(current_location["map"])
-                print(f"Discovered new map: {current_location['map']}")
+                print(f"============== Discovered new map: {current_location['map']} ==============")
                 self.start_location = (current_location["x"], current_location["y"])
                 distance = 0
                 self.max_dist = 0
-                reward += 50.0  # Large reward for discovering new map
+                reward += 100.0  # Large reward for discovering new map
             else:
                 self.discovered_locations.add(location_tuple)
-                print(f"Discovered new location: {location_tuple}")
+                # print(f"Discovered new location: {location_tuple}")
                 reward += 10.0  # Reward for discovering a new location
 
         # Distance-based rewards
         if distance == self.prev_distance:
             reward -= 1.0  # Penalize if distance from start hasn't increased
         elif distance > self.max_dist:
-            reward += 10.0  # Reward for achieving a new max distance
+            reward += 50.0  # Reward for achieving a new max distance
             reward += distance * 0.1
             self.max_dist = distance
         elif distance < self.max_dist:
-            reward += 5.0  # Reward for moving but getting closer
+            reward += 1.0  # Reward for moving but getting closer
 
         # Update the previous distance and location
         self.prev_distance = distance
