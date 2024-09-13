@@ -28,7 +28,7 @@ class PokemonBrock(PokemonEnvironment):
             WindowEvent.PRESS_ARROW_UP,
             WindowEvent.PRESS_BUTTON_A,
             WindowEvent.PRESS_BUTTON_B,
-            WindowEvent.PRESS_BUTTON_START,
+            # WindowEvent.PRESS_BUTTON_START,
         ]
 
         release_button: list[WindowEvent] = [
@@ -38,7 +38,7 @@ class PokemonBrock(PokemonEnvironment):
             WindowEvent.RELEASE_ARROW_UP,
             WindowEvent.RELEASE_BUTTON_A,
             WindowEvent.RELEASE_BUTTON_B,
-            WindowEvent.RELEASE_BUTTON_START,
+            # WindowEvent.RELEASE_BUTTON_START,
         ]
 
         super().__init__(
@@ -74,7 +74,7 @@ class PokemonBrock(PokemonEnvironment):
         state_array = [
             distance, # distance from start
             map_loc, # map location ie OAK'S LAB, PALLETTOWN
-            game_stats["seen_pokemon"]# seen pokemon here
+            # game_stats["seen_pokemon"]# seen pokemon here
         ]
         
         return state_array
@@ -84,14 +84,12 @@ class PokemonBrock(PokemonEnvironment):
         current_location = new_state["location"]
         location_tuple = (current_location["x"], current_location["y"], current_location["map"])
         reward = 0.0  # Initialize reward as 0
-
+        distance = 0
         # Calculate distance traveled if start_location is set
         if self.start_location:
             start_x, start_y = self.start_location
             current_x, current_y = current_location["x"], current_location["y"]
             distance = np.sqrt((current_x - start_x) ** 2 + (current_y - start_y) ** 2)
-        else:
-            distance = 0.0
 
         if location_tuple in self.previous_locations:
             reward -= 0.2  # Penalize for revisiting any of the last three locations
@@ -99,26 +97,32 @@ class PokemonBrock(PokemonEnvironment):
         # Penalize if location already visited
         elif location_tuple in self.discovered_locations_episode:
             reward -= 0.01  # Penalize for revisiting
+    
+        # add new map (across episodes)
+        if current_location["map"] not in self.discovered_maps_episode:
+            print(f"============ {current_location['map']} discovered in episode ============")
+            self.discovered_maps_episode.add(current_location["map"])
+            reward += 100.0 * len(self.discovered_maps_episode)
 
-        # If a new map is discovered
-        else:
-            if current_location["map"] not in self.discovered_maps_episode:
-                print(f"============== Discovered new map: {current_location['map']} ==============")
-                self.discovered_maps_episode.add(current_location["map"])
-                self.start_location = (current_location["x"], current_location["y"])
-                distance = 0
-                self.max_dist = 0
-                reward += 100.0  # Large reward for discovering new map
-            
             if current_location["map"] not in self.discovered_maps:
+                print(f"============ {current_location['map']} discovered FOR THE FIRST TIME ============")
                 self.discovered_maps.add(current_location["map"])
-                reward += 200.0 # * len(self.discovered_maps) # reward for finding a new location, across all episodes
-            else:
-                self.discovered_locations_episode.add(location_tuple)
-                if location_tuple not in self.discovered_locations:
-                    reward += 50.0 # reward for finding a new location, never before seen in any episode
-                else:
-                    reward += 10.0  # Reward for discovering a new location this episode
+                print(distance)
+                reward += 200.0 * len(self.discovered_maps)
+                print(f"discovered maps: {len(self.discovered_maps)}")
+            
+            # update start location
+            self.start_location = (current_location["x"], current_location["y"])
+            distance = 0
+            self.max_dist = 0
+        
+        if location_tuple not in self.discovered_locations_episode:
+            self.discovered_locations_episode.add(location_tuple) # record location this episode
+            reward += 10.0
+        if location_tuple not in self.discovered_locations:
+            # print("found new location")
+            reward += 50.0 # reward for finding a new location, never before seen in any episode
+            self.discovered_locations.add(location_tuple)
 
         # Distance-based rewards
         if distance == self.prev_distance:
@@ -128,7 +132,7 @@ class PokemonBrock(PokemonEnvironment):
             reward += distance * 0.1
             self.max_dist = distance
         elif distance < self.max_dist:
-            reward += 1.0  # Reward for moving but getting closer
+            reward -= 1.0  # Reward for moving but getting closer
 
         # Update the previous distance and location
         self.prev_distance = distance
