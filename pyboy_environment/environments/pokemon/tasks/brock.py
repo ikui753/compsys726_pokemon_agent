@@ -66,19 +66,23 @@ class PokemonBrock(PokemonEnvironment):
         else:
             distance = 0.0  # Default to 0 if there's no start location
 
+        # get map constant, reverse dictionary
+        reverse_map_locations = {v: k for k, v in pkc.map_locations.items()}
+        map_loc = reverse_map_locations.get(current_location["map"], -1)
         # Convert game_stats to a flat list or array and prepend the distance
         state_array = [
             distance, # distance from start
-            game_stats["party_size"],
-            len(game_stats["pokemon"]),  # Assuming pokemon is a list
+            map_loc, # map location ie OAK'S LAB, PALLETTOWN
+            #game_stats["party_size"],
+            #len(game_stats["pokemon"]),  # Assuming pokemon is a list
             # np.mean(game_stats["levels"]),  # Example: mean level of pokemon
             # np.mean(game_stats["hp"]),  # Example: mean hp of pokemon
             # np.mean(game_stats["xp"]),  # Example: mean xp of pokemon
             # np.mean(game_stats["status"]),  # Example: mean status of pokemon
-            game_stats["badges"],
-            game_stats["caught_pokemon"],
-            game_stats["seen_pokemon"],
-            game_stats["money"]
+            #game_stats["badges"],
+            #game_stats["caught_pokemon"],
+            #game_stats["seen_pokemon"],
+            #game_stats["money"]
         ]
         
         return state_array
@@ -88,7 +92,7 @@ class PokemonBrock(PokemonEnvironment):
         current_location = new_state["location"]
         location_tuple = (current_location["x"], current_location["y"], current_location["map"])
 
-        reward = 0.0 # initialise reward as 0
+        reward = 0.0  # Initialize reward as 0
 
         # Calculate distance traveled if start_location is set
         if self.start_location:
@@ -98,46 +102,60 @@ class PokemonBrock(PokemonEnvironment):
         else:
             distance = 0.0
 
-        # if location hasn't changed, penalise
+        # Penalize if location hasn't changed
         if current_location == self.previous_location:
-            reward = -0.1
-        # if location already visited, penalise
+            reward -= 0.1  # Penalize for not moving
+
+        # Penalize if location already visited
         elif location_tuple in self.discovered_locations:
-            reward = -0.01  # Penalize for visiting the same location
+            reward -= 0.01  # Penalize for revisiting
+
+        # If a new map is discovered
         else:
-            # Reward logic for discovering new map or new location
-            if current_location["map"] not in self.discovered_maps and current_location["map"] != "OAKS_LAB,":
+            if current_location["map"] not in self.discovered_maps: # and current_location["map"] != "OAKS_LAB":
                 self.discovered_maps.add(current_location["map"])
-                print(f"Discovered new map: {current_location['map']}")
+                print(f"========================== Discovered new map: {current_location['map']} ==========================")
                 # Set the start_location for the new map
                 self.start_location = (current_location["x"], current_location["y"])
+                # self.discovered_locations.clear() # clear discovered locations
+                distance = 0 # reset distance
                 print(self.start_location)
-                self.max_dist = 0 # reset distance
-                reward = 10.0  # Reward for discovering a new map
+                self.max_dist = 0  # Reset max distance on new map discovery
+                reward += 50.0  # Large reward for discovering new map
+            else:
+                # New location, add to discovered locations
+                self.discovered_locations.add(location_tuple)
+                print(f"Discovered new location: {location_tuple}")
+                reward += 10.0  # Reward for discovering a new location
 
-        # Update the previous location
-        self.previous_location = current_location
-        
-        # reward greater distance, penalise same distance
+        # Distance-based rewards
         if distance == self.prev_distance:
-            reward = -1.0
-            print(self.start_location)
-            print(current_location)
-            print(distance)
+            reward -= 1.0  # Penalize if distance from start hasn't increased
         elif distance > self.max_dist:
-            reward += 10.0 # achieved new distance, give reward
-            reward += distance # still reward bigger distances
+            reward += 10.0  # Reward for achieving a new max distance
+            reward += distance * 0.1  # Small additional reward for the actual distance
+            self.max_dist = distance  # Update the max distance
         elif distance < self.max_dist:
-            reward += 5.0
-            reward += distance
+            reward += 5.0  # Still provide some reward for moving but getting closer
 
+        # Update the previous distance and location
         self.prev_distance = distance
+        self.previous_location = current_location
+
         return reward
 
     def _check_if_done(self, game_stats: dict[str, any]) -> bool:
-        # Setting done to true if the agent beats the first gym
-        return game_stats["badges"] > self.prior_game_stats["badges"]
+        if game_stats["badges"] > self.prior_game_stats["badges"]:
+            # Clear sets when the agent finishes a task (like beating a gym)
+            self.discovered_locations.clear()
+            self.discovered_maps.clear()
+            return True
+        return False
+
 
     def _check_if_truncated(self, game_stats: dict) -> bool:
-        # End the game if too many steps are taken
-        return self.steps >= 1000
+        if self.steps >= 1000:  # If game is truncated
+            self.discovered_locations.clear()
+            self.discovered_maps.clear()
+            return True
+        return False
