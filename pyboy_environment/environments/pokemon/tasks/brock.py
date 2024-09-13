@@ -15,8 +15,7 @@ class PokemonBrock(PokemonEnvironment):
         self.discovered_locations = set()
         self.discovered_maps = set()
         self.start_location = None  # Track the start location
-        self.previous_location = None  # Track the previous location
-        self.previous_num_locs = 0  # Track the previous number of discovered locations
+        self.previous_locations = []  # Track the previous three locations
         self.max_dist = 0
         self.prev_distance = 0
 
@@ -73,16 +72,6 @@ class PokemonBrock(PokemonEnvironment):
         state_array = [
             distance, # distance from start
             map_loc, # map location ie OAK'S LAB, PALLETTOWN
-            #game_stats["party_size"],
-            #len(game_stats["pokemon"]),  # Assuming pokemon is a list
-            # np.mean(game_stats["levels"]),  # Example: mean level of pokemon
-            # np.mean(game_stats["hp"]),  # Example: mean hp of pokemon
-            # np.mean(game_stats["xp"]),  # Example: mean xp of pokemon
-            # np.mean(game_stats["status"]),  # Example: mean status of pokemon
-            #game_stats["badges"],
-            #game_stats["caught_pokemon"],
-            #game_stats["seen_pokemon"],
-            #game_stats["money"]
         ]
         
         return state_array
@@ -102,9 +91,8 @@ class PokemonBrock(PokemonEnvironment):
         else:
             distance = 0.0
 
-        # Penalize if location hasn't changed
-        if current_location == self.previous_location:
-            reward -= 0.1  # Penalize for not moving
+        if location_tuple in self.previous_locations:
+            reward -= 0.2  # Penalize for revisiting any of the last three locations
 
         # Penalize if location already visited
         elif location_tuple in self.discovered_locations:
@@ -112,18 +100,14 @@ class PokemonBrock(PokemonEnvironment):
 
         # If a new map is discovered
         else:
-            if current_location["map"] not in self.discovered_maps: # and current_location["map"] != "OAKS_LAB":
+            if current_location["map"] not in self.discovered_maps:
                 self.discovered_maps.add(current_location["map"])
-                print(f"========================== Discovered new map: {current_location['map']} ==========================")
-                # Set the start_location for the new map
+                print(f"Discovered new map: {current_location['map']}")
                 self.start_location = (current_location["x"], current_location["y"])
-                # self.discovered_locations.clear() # clear discovered locations
-                distance = 0 # reset distance
-                print(self.start_location)
-                self.max_dist = 0  # Reset max distance on new map discovery
+                distance = 0
+                self.max_dist = 0
                 reward += 50.0  # Large reward for discovering new map
             else:
-                # New location, add to discovered locations
                 self.discovered_locations.add(location_tuple)
                 print(f"Discovered new location: {location_tuple}")
                 reward += 10.0  # Reward for discovering a new location
@@ -132,29 +116,32 @@ class PokemonBrock(PokemonEnvironment):
         if distance == self.prev_distance:
             reward -= 1.0  # Penalize if distance from start hasn't increased
         elif distance > self.max_dist:
-            reward += 10.0  # Reward for achieving a new max distance
-            reward += distance * 0.1  # Small additional reward for the actual distance
-            self.max_dist = distance  # Update the max distance
+            reward += 50.0  # Reward for achieving a new max distance
+            reward += distance * 0.1
+            self.max_dist = distance
         elif distance < self.max_dist:
-            reward += 5.0  # Still provide some reward for moving but getting closer
+            reward += 5.0  # Reward for moving but getting closer
 
         # Update the previous distance and location
         self.prev_distance = distance
         self.previous_location = current_location
 
+        # Update previous locations list (keep only the last three)
+        if len(self.previous_locations) >= 3:
+            self.previous_locations.pop(0)  # Remove the oldest location
+        self.previous_locations.append(location_tuple)
+
         return reward
 
     def _check_if_done(self, game_stats: dict[str, any]) -> bool:
         if game_stats["badges"] > self.prior_game_stats["badges"]:
-            # Clear sets when the agent finishes a task (like beating a gym)
             self.discovered_locations.clear()
             self.discovered_maps.clear()
             return True
         return False
 
-
     def _check_if_truncated(self, game_stats: dict) -> bool:
-        if self.steps >= 1000:  # If game is truncated
+        if self.steps >= 1000:
             self.discovered_locations.clear()
             self.discovered_maps.clear()
             return True
