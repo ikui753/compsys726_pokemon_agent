@@ -116,7 +116,7 @@ class PokemonBrock(PokemonEnvironment):
         if distance == self.prev_distance:
             reward -= 1.0  # Penalize if distance from start hasn't increased
         elif distance > self.max_dist:
-            reward += 50.0  # Reward for achieving a new max distance
+            reward += 10.0  # Reward for achieving a new max distance
             reward += distance * 0.1
             self.max_dist = distance
         elif distance < self.max_dist:
