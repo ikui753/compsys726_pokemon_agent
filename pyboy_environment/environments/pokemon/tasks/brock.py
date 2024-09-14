@@ -18,6 +18,7 @@ class PokemonBrock(PokemonEnvironment):
         self.discovered_maps_episode = set()
         self.start_location = None  # Track the start location
         self.previous_locations = []  # Track the previous three locations
+        self.max_dist_episode = 0
         self.max_dist = 0
         self.prev_distance = 0
 
@@ -108,13 +109,14 @@ class PokemonBrock(PokemonEnvironment):
                 print(f"============ {current_location['map']} discovered FOR THE FIRST TIME ============")
                 self.discovered_maps.add(current_location["map"])
                 print(distance)
-                reward += 200.0 * len(self.discovered_maps)
+                reward += 300.0 * len(self.discovered_maps)
                 print(f"discovered maps: {len(self.discovered_maps)}")
             
             # update start location
             self.start_location = (current_location["x"], current_location["y"])
             distance = 0
-            self.max_dist = 0
+            print(self.start_location)
+            self.max_dist_episode = 0
         
         if location_tuple not in self.discovered_locations_episode:
             self.discovered_locations_episode.add(location_tuple) # record location this episode
@@ -127,12 +129,19 @@ class PokemonBrock(PokemonEnvironment):
         # Distance-based rewards
         if distance == self.prev_distance:
             reward -= 1.0  # Penalize if distance from start hasn't increased
-        elif distance > self.max_dist:
-            reward += 50.0  # Reward for achieving a new max distance
-            reward += distance * 0.1
-            self.max_dist = distance
-        elif distance < self.max_dist:
+        elif distance > self.max_dist_episode:
+            # greater reward if distance is greater than all episodes
+            if distance > self.max_dist:
+                reward += 100.0
+                reward += distance * 2
+                self.max_dist = distance
+            else:
+                reward += 50.0  # Reward for achieving a new max distance in this episode
+                reward += distance
+            self.max_dist_episode = distance
+        elif distance < self.max_dist_episode:
             reward -= 1.0  # Reward for moving but getting closer
+            reward += distance # still reward for being further away
 
         # Update the previous distance and location
         self.prev_distance = distance
@@ -147,14 +156,19 @@ class PokemonBrock(PokemonEnvironment):
 
     def _check_if_done(self, game_stats: dict[str, any]) -> bool:
         if game_stats["badges"] > self.prior_game_stats["badges"]:
-            self.discovered_locations_episode.clear()
-            self.discovered_maps_episode.clear()
+            self.reset_episode()
             return True
         return False
 
     def _check_if_truncated(self, game_stats: dict) -> bool:
         if self.steps >= 1000:
-            self.discovered_locations_episode.clear()
-            self.discovered_maps_episode.clear()
+            self.reset_episode()
             return True
         return False
+    
+    def reset_episode(self):
+        print("resetting episode")
+        self.discovered_locations_episode.clear()
+        self.discovered_maps_episode.clear()
+        self.max_dist_episode = 0
+        print(f"{self.max_dist}")
