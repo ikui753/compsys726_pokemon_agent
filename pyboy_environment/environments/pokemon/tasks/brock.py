@@ -98,7 +98,7 @@ class PokemonBrock(PokemonEnvironment):
         # calculate distance rewards
         reward += self.calculate_distance_rewards(distance, map_loc, location_tuple)
         # Penalize swapping between the same two maps
-        # reward += self.check_map_swap(map_loc)
+        reward += self.check_map_swap(map_loc)
 
         # ========== EXPLORATION LOGIC ==========
         if self.prev_state is not None and self.current_state["seen_pokemon"] > self.prev_state["seen_pokemon"]:
@@ -200,10 +200,11 @@ class PokemonBrock(PokemonEnvironment):
     def check_map_swap(self, map_loc):
         reward = 0
         # Penalize swapping between the same two maps
-        if len(self.previous_locations) >= 2:
-            prev_map = self.previous_locations[-2][3]  # Get map_id from two steps ago
-            last_map = self.previous_locations[-1][3]  # Get map_id from the previous step
-            if map_loc == prev_map and last_map == prev_map:
-                reward -= 1.0  # Penalize for swapping maps back and forth
+        if len(self.previous_locations) >= 3:
+            first_map = self.previous_locations[0][3]
+            second_map = self.previous_locations[1][3]  # Get map_id from two steps ago
+            third_map = self.previous_locations[2][3]  # Get map_id from the previous step
+            if first_map == third_map and first_map != second_map:
+                reward -= 100.0  # Penalize for swapping maps back and forth
                 print("Swapping between the same two maps detected")
         return reward
