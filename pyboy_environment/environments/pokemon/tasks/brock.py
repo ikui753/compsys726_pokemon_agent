@@ -22,6 +22,7 @@ class PokemonBrock(PokemonEnvironment):
         self.max_dist = np.zeros(248)          # Record max distance per map/ room
         self.prev_distance = 0
         self.current_location = None # record current location
+        self.currrent_state = None
         self.prev_state = None
 
         valid_actions: list[WindowEvent] = [
@@ -57,6 +58,7 @@ class PokemonBrock(PokemonEnvironment):
     def _get_state(self) -> np.ndarray:
         # Retrieve the current game state
         game_stats = self._generate_game_stats()
+        self.current_state = game_stats 
         self.current_location = game_stats["location"]
         # get map number
         map_loc = self.current_location["map_id"]
@@ -90,6 +92,48 @@ class PokemonBrock(PokemonEnvironment):
         location_tuple = (self.current_location["x"], self.current_location["y"], self.current_location["map"], self.current_location["map_id"])
         reward = 0.0  # Initialize reward as 0
         distance = 0
+        
+        # calculate location and map rewards
+        reward += self.check_location_rewards(map_loc, location_tuple)
+        # calculate distance rewards
+        reward += self.calculate_distance_rewards(distance, map_loc, location_tuple)
+        # Penalize swapping between the same two maps
+        # reward += self.check_map_swap(map_loc)
+
+        # ========== EXPLORATION LOGIC ==========
+        if self.prev_state is not None and self.current_state["seen_pokemon"] > self.prev_state["seen_pokemon"]:
+            # found pokemon
+            reward += 200.0 * self.current_state["seen_pokemon"]
+            print("========== Pokemon found! ==========")
+            
+        # ========== UPDATE LOGIC ==========
+        # Update the previous distance and location
+        self.prev_distance = distance
+        self.previous_location = self.current_location
+
+        return reward
+
+    def _check_if_done(self, game_stats: dict[str, any]) -> bool:
+        if game_stats["badges"] > self.prior_game_stats["badges"]:
+            self.reset_episode()
+            return True
+        return False
+
+    def _check_if_truncated(self, game_stats: dict) -> bool:
+        if self.steps >= 1000:
+            self.reset_episode()
+            return True
+        return False
+    
+    def reset_episode(self):
+        print("resetting episode")
+        self.discovered_locations_episode.clear()
+        self.discovered_maps_episode.clear()
+        self.max_dist_episode = np.zeros(248) # reset all max distances this episode 
+        print(f"max distance: {self.max_dist[self.current_location['map_id']]}")
+
+    def check_location_rewards(self, map_loc, location_tuple):
+        reward = 0
         # Calculate distance traveled if start_location is set for each map 
         if self.start_location[map_loc]:
             start_x, start_y = self.start_location[map_loc]
@@ -129,6 +173,10 @@ class PokemonBrock(PokemonEnvironment):
             reward += 50.0 # reward for finding a new location, never before seen in any episode
             self.discovered_locations.add(location_tuple)
 
+        return reward
+
+    def calculate_distance_rewards(self, distance, map_loc, location_tuple):
+        reward = 0
         # Distance-based rewards
         if distance == self.prev_distance:
             reward -= 1.0  # Penalize if distance from start hasn't increased
@@ -147,31 +195,15 @@ class PokemonBrock(PokemonEnvironment):
         if len(self.previous_locations) >= 3:
             self.previous_locations.pop(0)  # Remove the oldest location
         self.previous_locations.append(location_tuple)
-
-        # ========== EXPLORATION LOGIC ==========
-        
-        # ========== UPDATE LOGIC ==========
-        # Update the previous distance and location
-        self.prev_distance = distance
-        self.previous_location = self.current_location
-
         return reward
 
-    def _check_if_done(self, game_stats: dict[str, any]) -> bool:
-        if game_stats["badges"] > self.prior_game_stats["badges"]:
-            self.reset_episode()
-            return True
-        return False
-
-    def _check_if_truncated(self, game_stats: dict) -> bool:
-        if self.steps >= 1000:
-            self.reset_episode()
-            return True
-        return False
-    
-    def reset_episode(self):
-        print("resetting episode")
-        self.discovered_locations_episode.clear()
-        self.discovered_maps_episode.clear()
-        self.max_dist_episode = np.zeros(248) # reset all max distances this episode 
-        print(f"max distance: {self.max_dist[self.current_location['map_id']]}")
+    def check_map_swap(self, map_loc):
+        reward = 0
+        # Penalize swapping between the same two maps
+        if len(self.previous_locations) >= 2:
+            prev_map = self.previous_locations[-2][3]  # Get map_id from two steps ago
+            last_map = self.previous_locations[-1][3]  # Get map_id from the previous step
+            if map_loc == prev_map and last_map == prev_map:
+                reward -= 1.0  # Penalize for swapping maps back and forth
+                print("Swapping between the same two maps detected")
+        return reward
