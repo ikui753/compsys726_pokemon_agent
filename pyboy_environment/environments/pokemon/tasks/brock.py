@@ -16,11 +16,13 @@ class PokemonBrock(PokemonEnvironment):
         self.discovered_locations_episode = set()
         self.discovered_maps = set()
         self.discovered_maps_episode = set()
-        self.start_location = None  # Track the start location
+        self.start_location = [None] * 248  # Track the start location of each map/ room
         self.previous_locations = []  # Track the previous three locations
-        self.max_dist_episode = 0
-        self.max_dist = 0
+        self.max_dist_episode = np.zeros(248)  # Record max distance per map/ room
+        self.max_dist = np.zeros(248)          # Record max distance per map/ room
         self.prev_distance = 0
+        self.current_location = None # record current location
+        self.prev_state = None
 
         valid_actions: list[WindowEvent] = [
             WindowEvent.PRESS_ARROW_DOWN,
@@ -55,68 +57,69 @@ class PokemonBrock(PokemonEnvironment):
     def _get_state(self) -> np.ndarray:
         # Retrieve the current game state
         game_stats = self._generate_game_stats()
-        current_location = game_stats["location"]
+        self.current_location = game_stats["location"]
+        # get map number
+        map_loc = self.current_location["map_id"]
         # If the start_location is None (first discovery of a new map), set it
-        if self.start_location is None:
-            self.start_location = (current_location["x"], current_location["y"])
+        if self.start_location[map_loc] is None:
+            self.start_location[map_loc] = (self.current_location["x"], self.current_location["y"])
 
         # Compute Euclidean distance from the start location
-        if self.start_location:
-            start_x, start_y = self.start_location
-            current_x, current_y = current_location["x"], current_location["y"]
+        if self.start_location[map_loc]:
+            start_x, start_y = self.start_location[map_loc]
+            current_x, current_y = self.current_location["x"], self.current_location["y"]
             distance = np.sqrt((current_x - start_x) ** 2 + (current_y - start_y) ** 2)
         else:
             distance = 0.0  # Default to 0 if there's no start location
 
-        # get map constant, reverse dictionary
-        reverse_map_locations = {v: k for k, v in pkc.map_locations.items()}
-        map_loc = reverse_map_locations.get(current_location["map"], -1)
         # Convert game_stats to a flat list or array and prepend the distance
         state_array = [
             distance, # distance from start
             map_loc, # map location ie OAK'S LAB, PALLETTOWN
-            # game_stats["seen_pokemon"]# seen pokemon here
+            game_stats["seen_pokemon"]# seen pokemon here
         ]
         
+        self.prev_state = game_stats # remember previous state
         return state_array
 
     def _calculate_reward(self, new_state: dict) -> float:
+        # ========== LOCATION LOGIC ==========  
         # Get the current location and turn into a tuple
-        current_location = new_state["location"]
-        location_tuple = (current_location["x"], current_location["y"], current_location["map"])
+        # current_location = new_state["location"]
+        map_loc = self.current_location["map_id"]
+        location_tuple = (self.current_location["x"], self.current_location["y"], self.current_location["map"], self.current_location["map_id"])
         reward = 0.0  # Initialize reward as 0
         distance = 0
-        # Calculate distance traveled if start_location is set
-        if self.start_location:
-            start_x, start_y = self.start_location
-            current_x, current_y = current_location["x"], current_location["y"]
+        # Calculate distance traveled if start_location is set for each map 
+        if self.start_location[map_loc]:
+            start_x, start_y = self.start_location[map_loc]
+            current_x, current_y = self.current_location["x"], self.current_location["y"]
             distance = np.sqrt((current_x - start_x) ** 2 + (current_y - start_y) ** 2)
 
         if location_tuple in self.previous_locations:
             reward -= 0.2  # Penalize for revisiting any of the last three locations
-
-        # Penalize if location already visited
-        elif location_tuple in self.discovered_locations_episode:
+        elif location_tuple in self.discovered_locations_episode:  # Penalize if location already visited
             reward -= 0.01  # Penalize for revisiting
     
         # add new map (across episodes)
-        if current_location["map"] not in self.discovered_maps_episode:
-            print(f"============ {current_location['map']} discovered in episode ============")
-            self.discovered_maps_episode.add(current_location["map"])
+        if self.current_location["map"] not in self.discovered_maps_episode:
+            print(f"============ {self.current_location['map']} discovered in episode ============")
+            self.discovered_maps_episode.add(self.current_location["map"])
             reward += 100.0 * len(self.discovered_maps_episode)
 
-            if current_location["map"] not in self.discovered_maps:
-                print(f"============ {current_location['map']} discovered FOR THE FIRST TIME ============")
-                self.discovered_maps.add(current_location["map"])
+            if self.current_location["map"] not in self.discovered_maps:
+                print(f"============ {self.current_location['map']} discovered FOR THE FIRST TIME ============")
+                self.discovered_maps.add(self.current_location["map"])
                 print(distance)
                 reward += 300.0 * len(self.discovered_maps)
                 print(f"discovered maps: {len(self.discovered_maps)}")
             
-            # update start location
-            self.start_location = (current_location["x"], current_location["y"])
+            # update start location for a new map and reset max distances
+            self.start_location[map_loc] = (self.current_location["x"], self.current_location["y"])
             distance = 0
-            print(self.start_location)
-            self.max_dist_episode = 0
+            self.max_dist_episode[map_loc] = 0
+            self.max_dist[map_loc] = 0
+            print(self.start_location[map_loc])
         
         if location_tuple not in self.discovered_locations_episode:
             self.discovered_locations_episode.add(location_tuple) # record location this episode
@@ -129,28 +132,28 @@ class PokemonBrock(PokemonEnvironment):
         # Distance-based rewards
         if distance == self.prev_distance:
             reward -= 1.0  # Penalize if distance from start hasn't increased
-        elif distance > self.max_dist_episode:
+        elif distance > self.max_dist_episode[map_loc]:
+            self.max_dist_episode[map_loc] = distance
             # greater reward if distance is greater than all episodes
-            if distance > self.max_dist:
-                reward += 100.0
-                reward += distance * 2
-                self.max_dist = distance
+            if distance > self.max_dist[map_loc]:
+                reward += 100.0 + (distance * 2)
+                self.max_dist[map_loc] = distance
             else:
-                reward += 50.0  # Reward for achieving a new max distance in this episode
-                reward += distance
-            self.max_dist_episode = distance
-        elif distance < self.max_dist_episode:
-            reward -= 1.0  # Reward for moving but getting closer
-            reward += distance # still reward for being further away
+                reward += 50.0 + distance  # Reward for achieving a new max distance in this episode
+        elif distance < self.max_dist_episode[map_loc]:
+            reward -= 1.0 #  distance # Reward for moving but getting closer
 
-        # Update the previous distance and location
-        self.prev_distance = distance
-        self.previous_location = current_location
-
-        # Update previous locations list (keep only the last three)
+         # Update previous locations list (keep only the last three)
         if len(self.previous_locations) >= 3:
             self.previous_locations.pop(0)  # Remove the oldest location
         self.previous_locations.append(location_tuple)
+
+        # ========== EXPLORATION LOGIC ==========
+        
+        # ========== UPDATE LOGIC ==========
+        # Update the previous distance and location
+        self.prev_distance = distance
+        self.previous_location = self.current_location
 
         return reward
 
@@ -170,5 +173,5 @@ class PokemonBrock(PokemonEnvironment):
         print("resetting episode")
         self.discovered_locations_episode.clear()
         self.discovered_maps_episode.clear()
-        self.max_dist_episode = 0
-        print(f"{self.max_dist}")
+        self.max_dist_episode = np.zeros(248) # reset all max distances this episode 
+        print(f"max distance: {self.max_dist[self.current_location['map_id']]}")
