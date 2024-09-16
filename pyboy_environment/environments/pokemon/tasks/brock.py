@@ -77,8 +77,10 @@ class PokemonBrock(PokemonEnvironment):
         # Convert game_stats to a flat list or array and prepend the distance
         state_array = [
             distance, # distance from start
-            map_loc, # map location ie OAK'S LAB, PALLETTOWN
-            game_stats["seen_pokemon"]# seen pokemon here
+            map_loc, # map location ie OAK'S LAB, PALLETOWN
+            # game_stats["seen_pokemon"], # seen pokemon here
+            # self.current_location["x"],
+            # self.current_location["y"]
         ]
         
         self.prev_state = game_stats # remember previous state
@@ -129,8 +131,8 @@ class PokemonBrock(PokemonEnvironment):
         print("resetting episode")
         self.discovered_locations_episode.clear()
         self.discovered_maps_episode.clear()
-        self.max_dist_episode = np.zeros(248) # reset all max distances this episode 
         print(f"max distance: {self.max_dist[self.current_location['map_id']]}")
+        self.max_dist_episode = np.zeros(248) # reset all max distances this episode 
 
     def check_location_rewards(self, map_loc, location_tuple):
         reward = 0
@@ -140,10 +142,11 @@ class PokemonBrock(PokemonEnvironment):
             current_x, current_y = self.current_location["x"], self.current_location["y"]
             distance = np.sqrt((current_x - start_x) ** 2 + (current_y - start_y) ** 2)
 
-        if location_tuple in self.previous_locations:
-            reward -= 0.2  # Penalize for revisiting any of the last three locations
-        elif location_tuple in self.discovered_locations_episode:  # Penalize if location already visited
-            reward -= 0.01  # Penalize for revisiting
+        # no reward from repeated locations
+        # if location_tuple in self.previous_locations:
+        #     reward -= 0.2  # Penalize for revisiting any of the last three locations
+        # elif location_tuple in self.discovered_locations_episode:  # Penalize if location already visited
+        #     reward -= 0.01  # Penalize for revisiting
     
         # add new map (across episodes)
         if self.current_location["map"] not in self.discovered_maps_episode:
@@ -173,6 +176,11 @@ class PokemonBrock(PokemonEnvironment):
             reward += 50.0 # reward for finding a new location, never before seen in any episode
             self.discovered_locations.add(location_tuple)
 
+        # Update previous locations list (keep only the last three)
+        if len(self.previous_locations) >= 3:
+            self.previous_locations.pop(0)  # Remove the oldest location
+        self.previous_locations.append(location_tuple)
+
         return reward
 
     def calculate_distance_rewards(self, distance, map_loc, location_tuple):
@@ -182,19 +190,15 @@ class PokemonBrock(PokemonEnvironment):
             reward -= 1.0  # Penalize if distance from start hasn't increased
         elif distance > self.max_dist_episode[map_loc]:
             self.max_dist_episode[map_loc] = distance
-            # greater reward if distance is greater than all episodes
+            # greater reward if distance is greater than all episodes- only reward for greater distances
             if distance > self.max_dist[map_loc]:
-                reward += 100.0 + (distance * 2)
+                reward += 20.0 + (distance * 2)
                 self.max_dist[map_loc] = distance
             else:
-                reward += 50.0 + distance  # Reward for achieving a new max distance in this episode
-        elif distance < self.max_dist_episode[map_loc]:
-            reward -= 1.0 #  distance # Reward for moving but getting closer
+                reward += distance  # Reward for achieving a new max distance in this episode
+        # elif distance < self.max_dist_episode[map_loc]:
+        #     reward -= 1.0 #  distance # Reward for moving but getting closer
 
-         # Update previous locations list (keep only the last three)
-        if len(self.previous_locations) >= 3:
-            self.previous_locations.pop(0)  # Remove the oldest location
-        self.previous_locations.append(location_tuple)
         return reward
 
     def check_map_swap(self, map_loc):
