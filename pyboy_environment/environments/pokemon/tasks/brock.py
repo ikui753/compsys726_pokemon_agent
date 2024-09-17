@@ -24,6 +24,7 @@ class PokemonBrock(PokemonEnvironment):
         self.current_location = None # record current location
         self.currrent_state = None
         self.prev_state = None
+        self.found_map = False
 
         valid_actions: list[WindowEvent] = [
             WindowEvent.PRESS_ARROW_DOWN,
@@ -95,12 +96,24 @@ class PokemonBrock(PokemonEnvironment):
         reward = 0.0  # Initialize reward as 0
         distance = 0
         
+        # Calculate distance traveled if start_location is set for each map 
+        if self.start_location[map_loc]:
+            start_x, start_y = self.start_location[map_loc]
+            current_x, current_y = self.current_location["x"], self.current_location["y"]
+            distance = np.sqrt((current_x - start_x) ** 2 + (current_y - start_y) ** 2)
+
         # calculate location and map rewards
-        reward += self.check_location_rewards(map_loc, location_tuple)
+        reward += self.check_location_rewards(map_loc, location_tuple, distance)
         # calculate distance rewards
         reward += self.calculate_distance_rewards(distance, map_loc, location_tuple)
         # Penalize swapping between the same two maps
         reward += self.check_map_swap(map_loc)
+
+        # print(f"start: {self.start_location[map_loc]}")
+        # print(f"current: {self.current_location}")
+        # print(distance)
+        # print(f"max dist {map_loc}: {self.max_dist_episode[map_loc]}")
+        # input("pause")
 
         # ========== EXPLORATION LOGIC ==========
         if self.prev_state is not None and self.current_state["seen_pokemon"] > self.prev_state["seen_pokemon"]:
@@ -134,54 +147,50 @@ class PokemonBrock(PokemonEnvironment):
         print(f"max distance: {self.max_dist[self.current_location['map_id']]}")
         self.max_dist_episode = np.zeros(248) # reset all max distances this episode 
 
-    def check_location_rewards(self, map_loc, location_tuple):
+    def check_location_rewards(self, map_loc, location_tuple, distance):
         reward = 0
-        # Calculate distance traveled if start_location is set for each map 
-        if self.start_location[map_loc]:
-            start_x, start_y = self.start_location[map_loc]
-            current_x, current_y = self.current_location["x"], self.current_location["y"]
-            distance = np.sqrt((current_x - start_x) ** 2 + (current_y - start_y) ** 2)
 
-        # no reward from repeated locations
-        # if location_tuple in self.previous_locations:
-        #     reward -= 0.2  # Penalize for revisiting any of the last three locations
-        # elif location_tuple in self.discovered_locations_episode:  # Penalize if location already visited
-        #     reward -= 0.01  # Penalize for revisiting
-    
-        # add new map (across episodes)
-        if self.current_location["map"] not in self.discovered_maps_episode:
-            print(f"============ {self.current_location['map']} discovered in episode ============")
-            self.discovered_maps_episode.add(self.current_location["map"])
-            reward += 100.0 * len(self.discovered_maps_episode)
+        # Handle new map discovery (across episodes)
+        if self.current_location["map"] not in self.discovered_maps_episode or self.found_map:
+            if not self.found_map:
+                # print("New map discovered, will update start location in next tick.")
+                self.found_map = True  # Set the flag to wait for the next tick
+                self.max_dist_episode[map_loc] = 0 
+            else:
+                # print("Updating start location for new map.")
+                self.found_map = False  # Reset the flag
+                self.discovered_maps_episode.add(self.current_location["map"])
+                reward += 100.0 * len(self.discovered_maps_episode)
 
-            if self.current_location["map"] not in self.discovered_maps:
-                print(f"============ {self.current_location['map']} discovered FOR THE FIRST TIME ============")
-                self.discovered_maps.add(self.current_location["map"])
-                print(distance)
-                reward += 300.0 * len(self.discovered_maps)
-                print(f"discovered maps: {len(self.discovered_maps)}")
-            
-            # update start location for a new map and reset max distances
-            self.start_location[map_loc] = (self.current_location["x"], self.current_location["y"])
-            distance = 0
-            self.max_dist_episode[map_loc] = 0
-            self.max_dist[map_loc] = 0
-            print(self.start_location[map_loc])
+                # If it's the first time discovering this map across all episodes
+                if self.current_location["map"] not in self.discovered_maps:
+                    print(f"============ {self.current_location['map']} discovered FOR THE FIRST TIME ============")
+                    self.discovered_maps.add(self.current_location["map"])
+                    reward += 300.0 * len(self.discovered_maps)
+
+                # Now update the start location for the new map
+                self.start_location[map_loc] = (self.current_location["x"], self.current_location["y"])
+                distance = 0
+                self.max_dist_episode[map_loc] = 0
+                self.max_dist[map_loc] = 0
+                print(f"New start location set for map {map_loc}: {self.start_location[map_loc]}")
         
+        # Handle location discovery within the map
         if location_tuple not in self.discovered_locations_episode:
-            self.discovered_locations_episode.add(location_tuple) # record location this episode
-            reward += 10.0
+            self.discovered_locations_episode.add(location_tuple)
+            reward += 10.0  # Reward for finding a new location in this episode
+
         if location_tuple not in self.discovered_locations:
-            # print("found new location")
-            reward += 50.0 # reward for finding a new location, never before seen in any episode
+            reward += 50.0  # Reward for finding a new location never seen in any episode
             self.discovered_locations.add(location_tuple)
 
-        # Update previous locations list (keep only the last three)
+        # Update previous locations (keeping only the last three)
         if len(self.previous_locations) >= 3:
             self.previous_locations.pop(0)  # Remove the oldest location
         self.previous_locations.append(location_tuple)
 
         return reward
+
 
     def calculate_distance_rewards(self, distance, map_loc, location_tuple):
         reward = 0
