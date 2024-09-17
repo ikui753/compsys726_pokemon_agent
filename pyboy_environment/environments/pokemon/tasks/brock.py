@@ -104,8 +104,7 @@ class PokemonBrock(PokemonEnvironment):
 
         # calculate location and map rewards
         reward += self.check_location_rewards(map_loc, location_tuple, distance)
-        # calculate distance rewards
-        reward += self.calculate_distance_rewards(distance, map_loc, location_tuple)
+
         # Penalize swapping between the same two maps
         reward += self.check_map_swap(map_loc)
 
@@ -150,44 +149,61 @@ class PokemonBrock(PokemonEnvironment):
     def check_location_rewards(self, map_loc, location_tuple, distance):
         reward = 0
 
+        if self.previous_locations:
+            # penalise for the same position
+            if self.current_location == self.previous_locations[0]:
+                reward -= 5.0
+        
         # Handle new map discovery (across episodes)
-        if self.current_location["map"] not in self.discovered_maps_episode or self.found_map:
+        elif self.current_location["map"] not in self.discovered_maps_episode or self.found_map:
             if not self.found_map:
-                # print("New map discovered, will update start location in next tick.")
                 self.found_map = True  # Set the flag to wait for the next tick
                 self.max_dist_episode[map_loc] = 0 
             else:
-                # print("Updating start location for new map.")
                 self.found_map = False  # Reset the flag
                 self.discovered_maps_episode.add(self.current_location["map"])
                 reward += 100.0 * len(self.discovered_maps_episode)
 
-                # If it's the first time discovering this map across all episodes
+                # First discovery of this map across all episodes
                 if self.current_location["map"] not in self.discovered_maps:
                     print(f"============ {self.current_location['map']} discovered FOR THE FIRST TIME ============")
                     self.discovered_maps.add(self.current_location["map"])
-                    reward += 300.0 * len(self.discovered_maps)
+                    reward += 300.0 ** len(self.discovered_maps)
 
-                # Now update the start location for the new map
+                # Update start location for the new map
                 self.start_location[map_loc] = (self.current_location["x"], self.current_location["y"])
-                distance = 0
                 self.max_dist_episode[map_loc] = 0
-                self.max_dist[map_loc] = 0
                 print(f"New start location set for map {map_loc}: {self.start_location[map_loc]}")
-        
+
         # Handle location discovery within the map
         if location_tuple not in self.discovered_locations_episode:
             self.discovered_locations_episode.add(location_tuple)
-            reward += 10.0  # Reward for finding a new location in this episode
+            distance_bonus = distance * 0.1  # Add a bonus based on distance
+            reward += 10.0 + distance_bonus  # Reward for finding a new location with distance bonus
 
         if location_tuple not in self.discovered_locations:
-            reward += 50.0  # Reward for finding a new location never seen in any episode
+            distance_bonus = distance * 0.2  # Larger bonus for all-time discoveries
+            reward += 50.0 + distance_bonus  # Reward for finding a new location never seen in any episode
             self.discovered_locations.add(location_tuple)
+            if distance > self.max_dist[map_loc]:
+                self.max_dist[map_loc] = distance # set distance as max dist
+                reward += 50.0
+
+        # no reward for already visited locations
+
+        # # Max distance reward logic
+        # if distance > self.max_dist_episode[map_loc]:
+        #     self.max_dist_episode[map_loc] = distance
+        # if distance > self.max_dist[map_loc]:
+        #     reward += 20.0 + (distance * 2)  # Greater reward for exceeding max distance across all episodes
+        #     self.max_dist[map_loc] = distance
+        # else:
+        #     reward += distance  # Reward for achieving a new max distance in this episode
 
         # Update previous locations (keeping only the last three)
         if len(self.previous_locations) >= 3:
             self.previous_locations.pop(0)  # Remove the oldest location
-        self.previous_locations.append(location_tuple)
+            self.previous_locations.append(location_tuple)
 
         return reward
 
