@@ -25,6 +25,8 @@ class PokemonBrock(PokemonEnvironment):
         self.currrent_state = None
         self.prev_state = None
         self.found_map = False
+        self.seen_pokemon_episode = 0
+        self.seen_pokemon = 0
 
         valid_actions: list[WindowEvent] = [
             WindowEvent.PRESS_ARROW_DOWN,
@@ -140,6 +142,7 @@ class PokemonBrock(PokemonEnvironment):
         print("resetting episode")
         self.discovered_locations_episode.clear()
         self.discovered_maps_episode.clear()
+        self.seen_pokemon_episode = 0
         print(f"max distance: {self.max_dist[self.current_location['map_id']]}")
         self.max_dist_episode = np.zeros(248) # reset all max distances this episode 
 
@@ -209,13 +212,31 @@ class PokemonBrock(PokemonEnvironment):
     
     def check_pokemon_rewards(self):
         reward = 0
-        # track number of pokemon seen
-        if self.prev_state:
-            if self.current_state["seen_pokemon"] > self.prev_state["seen_pokemon"]:
-                reward += 1000 #200.0 * self.current_state["seen_pokemon"]
-                print("============== Found new Pokemon, giving reward ==============")
 
-        # track number of pokemon caught
+        # Ensure prev_state is available for comparison
+        if self.prev_state:
+            # Found new Pokémon in the current state- counts unique pokemon
+            if self.current_state["seen_pokemon"] > self.prev_state["seen_pokemon"]:
+                print(f"currrent state seen: {self.current_state['seen_pokemon']}")
+                print(f"previous state seen: {self.prev_state['seen_pokemon']}")
+                print(f"episode seen: {self.seen_pokemon_episode}")
+                print(f"max seen: {self.seen_pokemon}")
+
+                reward += 1000.0
+                print("============== Found new Pokémon ==============")
+                
+                # Update the number of Pokémon seen in the current episode
+                self.seen_pokemon_episode = self.current_state["seen_pokemon"]
+                
+                # If the number of Pokémon seen in this episode exceeds the global record
+                if self.seen_pokemon_episode > self.seen_pokemon:
+                    reward += 1000.0
+                    self.seen_pokemon = self.seen_pokemon_episode
+                    print("============== Max new Pokémon, giving reward ==============")
+        
+        # Ensure that `seen_pokemon_episode` is always updated correctly for future comparisons
+        self.seen_pokemon_episode = max(self.seen_pokemon_episode, self.current_state["seen_pokemon"])
 
         return reward
+
         
