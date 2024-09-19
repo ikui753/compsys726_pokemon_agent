@@ -203,8 +203,8 @@ class PokemonBrock(PokemonEnvironment):
         # Update previous locations (keeping only the last three)
         if len(self.previous_locations) >= 3:
             self.previous_locations.pop(0)  # Remove the oldest location
-            self.previous_locations.append(location_tuple)
-
+        
+        self.previous_locations.append(location_tuple)
         return reward
 
 
