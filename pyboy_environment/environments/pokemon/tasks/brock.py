@@ -84,13 +84,11 @@ class PokemonBrock(PokemonEnvironment):
             # self.current_location["y"]
         ]
         
-        self.prev_state = game_stats # remember previous state
         return state_array
 
     def _calculate_reward(self, new_state: dict) -> float:
         # ========== LOCATION LOGIC ==========  
         # Get the current location and turn into a tuple
-        # current_location = new_state["location"]
         map_loc = self.current_location["map_id"]
         location_tuple = (self.current_location["x"], self.current_location["y"], self.current_location["map"], self.current_location["map_id"])
         reward = 0.0  # Initialize reward as 0
@@ -108,6 +106,9 @@ class PokemonBrock(PokemonEnvironment):
         # Penalize swapping between the same two maps
         reward += self.check_map_swap(map_loc)
 
+        # Calculate Pokemon related rewards
+        reward += self.check_pokemon_rewards()
+
         # print(f"start: {self.start_location[map_loc]}")
         # print(f"current: {self.current_location}")
         # print(distance)
@@ -115,16 +116,12 @@ class PokemonBrock(PokemonEnvironment):
         # input("pause")
 
         # ========== EXPLORATION LOGIC ==========
-        if self.prev_state is not None and self.current_state["seen_pokemon"] > self.prev_state["seen_pokemon"]:
-            # found pokemon
-            reward += 200.0 * self.current_state["seen_pokemon"]
-            print("========== Pokemon found! ==========")
             
         # ========== UPDATE LOGIC ==========
         # Update the previous distance and location
         self.prev_distance = distance
         self.previous_location = self.current_location
-
+        self.prev_state = self.current_state
         return reward
 
     def _check_if_done(self, game_stats: dict[str, any]) -> bool:
@@ -150,8 +147,8 @@ class PokemonBrock(PokemonEnvironment):
         reward = 0
 
         if self.previous_locations:
-            # penalise for the same position
-            if self.current_location == self.previous_locations[0]:
+            # penalise for the same position, except when on grass
+            if self.current_location == self.previous_locations[0] and self._is_grass_tile() == False:
                 reward -= 5.0
         
         # Handle new map discovery (across episodes)
@@ -191,39 +188,11 @@ class PokemonBrock(PokemonEnvironment):
 
         # no reward for already visited locations
 
-        # # Max distance reward logic
-        # if distance > self.max_dist_episode[map_loc]:
-        #     self.max_dist_episode[map_loc] = distance
-        # if distance > self.max_dist[map_loc]:
-        #     reward += 20.0 + (distance * 2)  # Greater reward for exceeding max distance across all episodes
-        #     self.max_dist[map_loc] = distance
-        # else:
-        #     reward += distance  # Reward for achieving a new max distance in this episode
-
         # Update previous locations (keeping only the last three)
         if len(self.previous_locations) >= 3:
             self.previous_locations.pop(0)  # Remove the oldest location
         
         self.previous_locations.append(location_tuple)
-        return reward
-
-
-    def calculate_distance_rewards(self, distance, map_loc, location_tuple):
-        reward = 0
-        # Distance-based rewards
-        if distance == self.prev_distance:
-            reward -= 1.0  # Penalize if distance from start hasn't increased
-        elif distance > self.max_dist_episode[map_loc]:
-            self.max_dist_episode[map_loc] = distance
-            # greater reward if distance is greater than all episodes- only reward for greater distances
-            if distance > self.max_dist[map_loc]:
-                reward += 20.0 + (distance * 2)
-                self.max_dist[map_loc] = distance
-            else:
-                reward += distance  # Reward for achieving a new max distance in this episode
-        # elif distance < self.max_dist_episode[map_loc]:
-        #     reward -= 1.0 #  distance # Reward for moving but getting closer
-
         return reward
 
     def check_map_swap(self, map_loc):
@@ -237,3 +206,18 @@ class PokemonBrock(PokemonEnvironment):
                 reward -= 100.0  # Penalize for swapping maps back and forth
                 print("Swapping between the same two maps detected")
         return reward
+    
+    def check_pokemon_rewards(self):
+        reward = 0
+        # track number of pokemon seen
+        if self.prev_state:
+            #print(self.current_state["seen_pokemon"])
+            # print(self.prev_state["seen_pokemon"])
+            if self.current_state["seen_pokemon"] > self.prev_state["seen_pokemon"]:
+                reward += 200.0 ** self.current_state["seen_pokemon"]
+                print("============== Found new Pokemon, giving reward ==============")
+
+        # track number of pokemon caught
+
+        return reward
+        
