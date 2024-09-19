@@ -211,10 +211,8 @@ class PokemonBrock(PokemonEnvironment):
         reward = 0
         # track number of pokemon seen
         if self.prev_state:
-            #print(self.current_state["seen_pokemon"])
-            # print(self.prev_state["seen_pokemon"])
             if self.current_state["seen_pokemon"] > self.prev_state["seen_pokemon"]:
-                reward += 200.0 ** self.current_state["seen_pokemon"]
+                reward += 1000 #200.0 * self.current_state["seen_pokemon"]
                 print("============== Found new Pokemon, giving reward ==============")
 
         # track number of pokemon caught
