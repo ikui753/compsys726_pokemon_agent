@@ -21,12 +21,14 @@ class PokemonBrock(PokemonEnvironment):
         self.max_dist_episode = np.zeros(248)  # Record max distance per map/ room
         self.max_dist = np.zeros(248)          # Record max distance per map/ room
         self.prev_distance = 0
+        self.prev_distance_t = 0
         self.current_location = None # record current location
         self.currrent_state = None
         self.prev_state = None
         self.found_map = False
         self.seen_pokemon_episode = 0
         self.seen_pokemon = 0
+        self.target_loc = [None] * 248
 
         valid_actions: list[WindowEvent] = [
             WindowEvent.PRESS_ARROW_DOWN,
@@ -95,6 +97,7 @@ class PokemonBrock(PokemonEnvironment):
         location_tuple = (self.current_location["x"], self.current_location["y"], self.current_location["map"], self.current_location["map_id"])
         reward = 0.0  # Initialize reward as 0
         distance = 0
+        distance_t = 0
         
         # Calculate distance traveled if start_location is set for each map 
         if self.start_location[map_loc]:
@@ -104,7 +107,11 @@ class PokemonBrock(PokemonEnvironment):
 
         # print(self._read_events())
         # calculate location and map rewards
-        reward += self.check_location_rewards(map_loc, location_tuple, distance)
+        if self.target_loc[map_loc] != (0, 0):
+            reward += self.check_location_rewards(map_loc, location_tuple, distance)
+        else:
+            distance_t = self.calculate_distance(self.target_loc[map_loc][0], self.target_loc[map_loc][1], location_tuple[0], location_tuple[1])
+            reward += self.target_rewards(map_loc, distance_t, self.prev_distance_t)
 
         # Penalize swapping between the same two maps
         reward += self.check_map_swap(map_loc)
@@ -112,19 +119,20 @@ class PokemonBrock(PokemonEnvironment):
         # Calculate Pokemon related rewards
         reward += self.check_pokemon_rewards()
 
-        # print(f"start: {self.start_location[map_loc]}")
-        # print(f"current: {self.current_location}")
-        # print(distance)
-        # print(f"max dist {map_loc}: {self.max_dist_episode[map_loc]}")
-        # input("pause")
-
-        # ========== EXPLORATION LOGIC ==========
+        print(f"start: {self.start_location[map_loc]}")
+        print(f"current: {self.current_location}")
+        print(f"distance: {distance}")
+        print(f"distance_t: {distance_t}")
+        print(f"target_loc: {self.target_loc[map_loc]}")
+        print(f"max dist {map_loc}: {self.max_dist_episode[map_loc]}")
+        input("pause")
             
         # ========== UPDATE LOGIC ==========
         # Update the previous distance and location
         self.prev_distance = distance
         self.previous_location = self.current_location
         self.prev_state = self.current_state
+        self.prev_distance_t = distance_t
         return reward
 
     def _check_if_done(self, game_stats: dict[str, any]) -> bool:
@@ -157,6 +165,11 @@ class PokemonBrock(PokemonEnvironment):
         
         # Handle new map discovery (across episodes)
         if self.current_location["map"] not in self.discovered_maps_episode or self.found_map:
+            # update target loc- use previous location
+            if map_loc != 40:
+                self.target_loc[self.previous_locations[1][3]] = (self.previous_locations[1][0], self.previous_locations[1][1])
+                print(f"target loc: {self.target_loc[self.previous_locations[1][3]]}")
+
             if not self.found_map:
                 self.found_map = True  # Set the flag to wait for the next tick
                 self.max_dist_episode[map_loc] = 0 
@@ -249,4 +262,12 @@ class PokemonBrock(PokemonEnvironment):
 
         return reward
 
-        
+    def target_rewards(map_loc, distance, prev_dist):
+        if distance > prev_dist:
+            reward += 100.0
+            return reward
+        return 0
+
+    def calculate_distance(target_x, target_y, current_x, current_y):
+        distance = np.sqrt((current_x - target_x) ** 2 + (current_y - target_y) ** 2)
+        return distance
