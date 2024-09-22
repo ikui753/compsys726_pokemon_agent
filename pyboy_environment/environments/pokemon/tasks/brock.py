@@ -21,14 +21,13 @@ class PokemonBrock(PokemonEnvironment):
         self.max_dist_episode = np.zeros(248)  # Record max distance per map/ room
         self.max_dist = np.zeros(248)          # Record max distance per map/ room
         self.prev_distance = 0
-        self.prev_distance_t = 0
         self.current_location = None # record current location
         self.currrent_state = None
         self.prev_state = None
         self.found_map = False
         self.seen_pokemon_episode = 0
         self.seen_pokemon = 0
-        self.target_loc = [None] * 248
+        self.in_battle = False
 
         valid_actions: list[WindowEvent] = [
             WindowEvent.PRESS_ARROW_DOWN,
@@ -81,11 +80,11 @@ class PokemonBrock(PokemonEnvironment):
 
         # Convert game_stats to a flat list or array and prepend the distance
         state_array = [
-            # distance, # distance from start
+            distance, # distance from start
             map_loc, # map location ie OAK'S LAB, PALLETOWN
             # game_stats["seen_pokemon"], # seen pokemon here
-            self.current_location["x"],
-            self.current_location["y"]
+            # self.current_location["x"],
+            # self.current_location["y"]
         ]
         
         return state_array
@@ -95,9 +94,11 @@ class PokemonBrock(PokemonEnvironment):
         # Get the current location and turn into a tuple
         map_loc = self.current_location["map_id"]
         location_tuple = (self.current_location["x"], self.current_location["y"], self.current_location["map"], self.current_location["map_id"])
+        frame = PokemonEnvironment.grab_frame(self)
+        game_area = PokemonEnvironment.game_area(self)
+
         reward = 0.0  # Initialize reward as 0
         distance = 0
-        distance_t = 0
         
         # Calculate distance traveled if start_location is set for each map 
         if self.start_location[map_loc]:
@@ -105,34 +106,35 @@ class PokemonBrock(PokemonEnvironment):
             current_x, current_y = self.current_location["x"], self.current_location["y"]
             distance = np.sqrt((current_x - start_x) ** 2 + (current_y - start_y) ** 2)
 
-        # print(self._read_events())
         # calculate location and map rewards
-        if self.target_loc[map_loc] != (0, 0):
-            reward += self.check_location_rewards(map_loc, location_tuple, distance)
-        else:
-            distance_t = self.calculate_distance(self.target_loc[map_loc][0], self.target_loc[map_loc][1], location_tuple[0], location_tuple[1])
-            reward += self.target_rewards(map_loc, distance_t, self.prev_distance_t)
+        reward += self.check_location_rewards(map_loc, location_tuple, distance)
 
         # Penalize swapping between the same two maps
         reward += self.check_map_swap(map_loc)
 
         # Calculate Pokemon related rewards
-        reward += self.check_pokemon_rewards()
+        reward += self.check_pokemon_rewards(frame)
 
-        print(f"start: {self.start_location[map_loc]}")
-        print(f"current: {self.current_location}")
-        print(f"distance: {distance}")
-        print(f"distance_t: {distance_t}")
-        print(f"target_loc: {self.target_loc[map_loc]}")
-        print(f"max dist {map_loc}: {self.max_dist_episode[map_loc]}")
-        input("pause")
+        if self.in_battle:
+            reward += self.battle_rewards(game_area)
+
+        if self.in_battle:
+            print(f"start: {self.start_location[map_loc]}")
+            print(f"current: {self.current_location}")
+            print(distance)
+            print(f"max dist {map_loc}: {self.max_dist_episode[map_loc]}")
+            print(f"{game_area}")
+            print(frame)
+            input("pause")
+            
+
+        # ========== EXPLORATION LOGIC ==========
             
         # ========== UPDATE LOGIC ==========
         # Update the previous distance and location
         self.prev_distance = distance
         self.previous_location = self.current_location
         self.prev_state = self.current_state
-        self.prev_distance_t = distance_t
         return reward
 
     def _check_if_done(self, game_stats: dict[str, any]) -> bool:
@@ -142,7 +144,7 @@ class PokemonBrock(PokemonEnvironment):
         return False
 
     def _check_if_truncated(self, game_stats: dict) -> bool:
-        if self.steps >= 2000:
+        if self.steps >= 1000:
             self.reset_episode()
             return True
         return False
@@ -164,12 +166,7 @@ class PokemonBrock(PokemonEnvironment):
                 reward -= 5.0
         
         # Handle new map discovery (across episodes)
-        if self.current_location["map"] not in self.discovered_maps_episode or self.found_map:
-            # update target loc- use previous location
-            if map_loc != 40:
-                self.target_loc[self.previous_locations[1][3]] = (self.previous_locations[1][0], self.previous_locations[1][1])
-                print(f"target loc: {self.target_loc[self.previous_locations[1][3]]}")
-
+        elif self.current_location["map"] not in self.discovered_maps_episode or self.found_map:
             if not self.found_map:
                 self.found_map = True  # Set the flag to wait for the next tick
                 self.max_dist_episode[map_loc] = 0 
@@ -224,15 +221,16 @@ class PokemonBrock(PokemonEnvironment):
                 print("Swapping between the same two maps detected")
         return reward
     
-    def check_pokemon_rewards(self):
+    def check_pokemon_rewards(self, frame):
         reward = 0
 
         # Ensure prev_state is available for comparison
         if self.prev_state:
-            # Found new Pokémon in the current state- counts unique pokemon
             if self._is_grass_tile():
-                reward += 1.0
-            
+                if np.all(frame == 0):
+                    print("========= starting pokemon battle =========")
+                    self.in_battle = True
+            # Found new Pokémon in the current state- counts unique pokemon
             if self.current_state["seen_pokemon"] > self.prev_state["seen_pokemon"]:
                 print(f"currrent state seen: {self.current_state['seen_pokemon']}")
                 print(f"previous state seen: {self.prev_state['seen_pokemon']}")
@@ -240,7 +238,7 @@ class PokemonBrock(PokemonEnvironment):
                 print(f"max seen: {self.seen_pokemon}")
 
                 reward += 1000.0
-                print("============== Found new UNIQUE Pokémon ==============")
+                print("============== Found new Pokémon ==============")
                 
                 # Update the number of Pokémon seen in the current episode
                 self.seen_pokemon_episode = self.current_state["seen_pokemon"]
@@ -249,25 +247,25 @@ class PokemonBrock(PokemonEnvironment):
                 if self.seen_pokemon_episode > self.seen_pokemon:
                     reward += 1000.0
                     self.seen_pokemon = self.seen_pokemon_episode
-                    print("============== Max new UNIQUE Pokémon, giving reward ==============")
+                    print("============== Max new Pokémon, giving reward ==============")
         
         # Ensure that `seen_pokemon_episode` is always updated correctly for future comparisons
         self.seen_pokemon_episode = max(self.seen_pokemon_episode, self.current_state["seen_pokemon"])
 
-        if self.prev_state:
-            # CATCH POKEMON REWARDS
-            if self.current_state["caught_pokemon"] > self.prev_state["caught_pokemon"]:
-                reward += 10000.0
-                print("========== Caught a Pokemon! ==========")
-
         return reward
 
-    def target_rewards(map_loc, distance, prev_dist):
-        if distance > prev_dist:
+    def battle_rewards(self, game_area):
+        reward = 0
+        fight_state = np.array([
+    [380, 383, 383, 383, 383, 249, 251, 243, 249, 251, 380, 374, 374, 374, 374, 374, 374, 374, 375, 383],
+    [381, 378, 378, 378, 378, 378, 378, 378, 378, 378, 382, 378, 378, 378, 378, 378, 378, 378, 378, 379],
+    [380, 383, 383, 383, 380, 237, 147, 128, 130, 138, 139, 132, 383, 383, 383, 383, 383, 383, 383, 380],
+    [380, 383, 383, 383, 380, 383, 147, 128, 136, 139, 383, 150, 135, 136, 143, 383, 383, 383, 383, 380],
+    [380, 383, 383, 383, 380, 383, 227, 383, 383, 383, 383, 383, 383, 383, 383, 383, 383, 383, 383, 380],
+    [380, 383, 383, 383, 380, 383, 227, 383, 383, 383, 383, 383, 383, 383, 383, 383, 383, 383, 383, 380],
+    [381, 378, 378, 378, 381, 378, 378, 378, 378, 378, 378, 378, 378, 378, 378, 378, 378, 378, 378, 382]
+])
+        if np.array_equal(game_area[-7:, :], fight_state):
+            print("on attack menu")
             reward += 100.0
-            return reward
-        return 0
-
-    def calculate_distance(target_x, target_y, current_x, current_y):
-        distance = np.sqrt((current_x - target_x) ** 2 + (current_y - target_y) ** 2)
-        return distance
+        return reward
