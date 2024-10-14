@@ -130,8 +130,7 @@ class PokemonBrock(PokemonEnvironment):
             
 
         # ========== XP Rewards ==========
-         # ========== XP REWARD LOGIC ==========
-
+        self.xp_rewards()
 
         # ========== UPDATE LOGIC ==========
         # Update the previous distance and location
@@ -307,6 +306,7 @@ class PokemonBrock(PokemonEnvironment):
     [380, 180, 178, 164, 163, 383, 147, 128, 130, 138, 139, 132, 231, 383, 383, 383, 383, 383, 383, 380],
     [381, 378, 378, 378, 378, 378, 378, 378, 378, 378, 378, 378, 378, 378, 378, 378, 378, 378, 378, 382]
 ])
+        
         if np.array_equal(game_area[-7:, :], fight_menu):
             print("on fight menu")
             # self.in_fight = True
@@ -314,11 +314,11 @@ class PokemonBrock(PokemonEnvironment):
             
         elif np.array_equal(game_area[-7:, :], fight_state):
             print("on attack menu")
-            reward += 100.0
+            reward += 200.0
 
         elif np.array_equal(game_area[-7:, :], tackle_state):
             print("tackle action")
-            reward += 200.0
+            reward += 300.0
             
         elif np.array_equal(game_area[-7:, :], flee_state):
             print("on flee menu")
@@ -331,10 +331,14 @@ class PokemonBrock(PokemonEnvironment):
             prev_xp = self.prev_state['xp']
             current_xp = self.current_state['xp']
 
-            # Reward for XP increase
-            xp_diff = current_xp - prev_xp
-            if xp_diff > 0:
-                print("========== xp gained! ==========")
-                reward += xp_diff * 100  # Linear reward proportional to the XP increase
+            if current_xp > prev_xp:
+                print("========== Gained XP! ==========")
+                reward += 10000
+
+            # # Reward for XP increase
+            # xp_diff = current_xp - prev_xp
+            # if xp_diff > 0:
+            #     print("========== xp gained! ==========")
+            #     reward += xp_diff * 100  # Linear reward proportional to the XP increase
             
         return reward;
