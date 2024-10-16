@@ -84,9 +84,10 @@ class PokemonBrock(PokemonEnvironment):
         state_array = [
             distance, # distance from start
             map_loc, # map location ie OAK'S LAB, PALLETOWN
+            self.in_battle, # battle status
             # game_stats["seen_pokemon"], # seen pokemon here
-            # self.current_location["x"],
-            # self.current_location["y"]
+            # self.loc["x"],
+            # self.loc["y"]
         ]
         
         return state_array
@@ -106,12 +107,17 @@ class PokemonBrock(PokemonEnvironment):
             distance = np.sqrt((current_x - start_x) ** 2 + (current_y - start_y) ** 2)
 
         # distance += self.cumulative_distance # Add cumulative distance
-
+        if self.prev_distance > 0 and distance != self.prev_distance and self.in_battle == True: 
+            self.in_battle = False
+            print("exiting battle mode")
         # calculate location and map rewards
-        reward += self.check_distance_rewards(distance)
-        reward += self.check_map_rewards(self.loc["map_id"])
-        reward += self.check_pokemon_rewards(frame) # Calculate Pokemon related rewards
-        if self.in_battle: reward += self.battle_rewards(game_area) # Calculate battle rewards if in battle
+        if self.in_battle: 
+            reward += self.battle_rewards(game_area) # Calculate battle rewards if in battle
+            reward += self.xp_rewards()
+        else:
+            reward += self.check_distance_rewards(distance)
+            reward += self.check_map_rewards(self.loc["map_id"])
+            reward += self.check_pokemon_rewards(frame) # Calculate Pokemon related rewards
 
         # ========== UPDATE LOGIC ========== 
         # Update the previous distance and location
@@ -140,6 +146,7 @@ class PokemonBrock(PokemonEnvironment):
         self.seen_pokemon_episode = 0
         self.cumulative_distance = 0  # Reset cumulative distance for the new episode
         self.max_dist_episode = np.zeros(248) # reset all max distances this episode 
+        self.in_battle = False
 
     def check_distance_rewards(self, distance):
         reward = 0
@@ -209,7 +216,7 @@ class PokemonBrock(PokemonEnvironment):
     [380, 383, 383, 383, 383, 383, 383, 383, 380, 383, 136, 147, 132, 140, 383, 383, 145, 148, 141, 380],
     [381, 378, 378, 378, 378, 378, 378, 378, 381, 378, 378, 378, 378, 378, 378, 378, 378, 378, 378, 382]
 ])
-        fight_state = np.array([
+        attack_menu = np.array([
     [380, 383, 383, 383, 383, 249, 251, 243, 249, 251, 380, 374, 374, 374, 374, 374, 374, 374, 375, 383],
     [381, 378, 378, 378, 378, 378, 378, 378, 378, 378, 382, 378, 378, 378, 378, 378, 378, 378, 378, 379],
     [380, 383, 383, 383, 380, 237, 147, 128, 130, 138, 139, 132, 383, 383, 383, 383, 383, 383, 383, 380],
@@ -218,7 +225,7 @@ class PokemonBrock(PokemonEnvironment):
     [380, 383, 383, 383, 380, 383, 227, 383, 383, 383, 383, 383, 383, 383, 383, 383, 383, 383, 383, 380],
     [381, 378, 378, 378, 381, 378, 378, 378, 378, 378, 378, 378, 378, 378, 378, 378, 378, 378, 378, 382]
 ])
-        flee_state = np.array([
+        flee_menu = np.array([
     [383, 311, 318, 325, 332, 339, 346, 353, 383, 367, 374, 374, 374, 374, 374, 374, 374, 374, 375, 383],
     [377, 378, 378, 378, 378, 378, 378, 378, 377, 378, 378, 378, 378, 378, 378, 378, 378, 378, 378, 379],
     [380, 383, 383, 383, 383, 383, 383, 383, 380, 383, 383, 383, 383, 383, 383, 383, 383, 383, 383, 380],
@@ -228,17 +235,6 @@ class PokemonBrock(PokemonEnvironment):
     [381, 378, 378, 378, 378, 378, 378, 378, 381, 378, 378, 378, 378, 378, 378, 378, 378, 378, 378, 382]
 ])      
         tackle_state = np.array([
-    [383, 143, 136, 131, 134, 132, 152, 383, 383, 383, 383, 383, 256, 263, 270, 277, 284, 291, 298, 383],
-    [383, 383, 383, 383, 366, 249, 383, 383, 383, 383, 383, 383, 257, 264, 271, 278, 285, 292, 299, 383],
-    [383, 371, 369, 354, 363, 363, 363, 363, 363, 363, 364, 383, 258, 265, 272, 279, 286, 293, 300, 383],
-    [383, 372, 374, 374, 374, 374, 374, 374, 374, 374, 376, 383, 259, 266, 273, 280, 287, 294, 301, 383],
-    [383, 383, 383, 383, 383, 383, 383, 383, 383, 383, 383, 383, 260, 267, 274, 281, 288, 295, 302, 383],
-    [383, 305, 312, 319, 326, 333, 340, 347, 383, 383, 383, 383, 261, 268, 275, 282, 289, 296, 303, 383],
-    [383, 306, 313, 320, 327, 334, 341, 348, 383, 383, 383, 383, 262, 269, 276, 283, 290, 297, 304, 383],
-    [383, 307, 314, 321, 328, 335, 342, 349, 383, 383, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128],
-    [383, 308, 315, 322, 329, 336, 343, 350, 383, 383, 383, 383, 383, 383, 366, 252, 383, 383, 383, 383],
-    [383, 309, 316, 323, 330, 337, 344, 351, 383, 383, 369, 354, 363, 363, 363, 363, 363, 363, 365, 383],
-    [383, 310, 317, 324, 331, 338, 345, 352, 383, 383, 383, 383, 248, 248, 243, 383, 248, 248, 371, 383],
     [383, 311, 318, 325, 332, 339, 346, 353, 383, 367, 374, 374, 374, 374, 374, 374, 374, 374, 375, 383],
     [377, 378, 378, 378, 378, 378, 378, 378, 378, 378, 378, 378, 378, 378, 378, 378, 378, 378, 378, 379],
     [380, 383, 383, 383, 383, 383, 383, 383, 383, 383, 383, 383, 383, 383, 383, 383, 383, 383, 383, 380],
@@ -253,15 +249,15 @@ class PokemonBrock(PokemonEnvironment):
             # self.in_fight = True
             reward += 100.0
             
-        elif np.array_equal(game_area[-7:, :], fight_state):
-            print("on attack menu")
+        elif np.array_equal(game_area[-7:, :], attack_menu):
+            print("choosing attack")
             reward += 200.0
 
         elif np.array_equal(game_area[-7:, :], tackle_state):
-            print("tackle action")
+            print("performing tackle action")
             reward += 300.0
             
-        elif np.array_equal(game_area[-7:, :], flee_state):
+        elif np.array_equal(game_area[-7:, :], flee_menu):
             print("on flee menu")
             reward -= 100.0
         return reward
