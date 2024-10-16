@@ -134,7 +134,7 @@ class PokemonBrock(PokemonEnvironment):
         return False
 
     def _check_if_truncated(self, game_stats: dict) -> bool:
-        if self.steps >= 1000:
+        if self.steps >= 2000:
             self.reset_episode()
             return True
         return False
