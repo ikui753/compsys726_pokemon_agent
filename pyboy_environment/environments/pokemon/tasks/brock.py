@@ -17,10 +17,11 @@ class PokemonBrock(PokemonEnvironment):
         self.discovered_maps = set()
         self.discovered_maps_episode = set()
         self.start_location = [None] * 248  # Track the start location of each map/ room
-        self.previous_locations = []  # Track the previous three locations
+        self.prev_loc = []  # Track the previous location
         self.max_dist_episode = np.zeros(248)  # Record max distance per map/ room
         self.max_dist = np.zeros(248)          # Record max distance per map/ room
         self.prev_distance = 0
+        self.cumulative_distance = 0  # Track cumulative distance for the episode
         self.loc = None # record current location
         self.currrent_state = None
         self.prev_state = None
@@ -91,20 +92,20 @@ class PokemonBrock(PokemonEnvironment):
         return state_array
 
     def _calculate_reward(self, new_state: dict) -> float:
-        # ========== LOCATION LOGIC ==========  
-        # Get the current location and turn into a tuple
-        location_tuple = (self.loc["x"], self.loc["y"], self.loc["map"], self.loc["map_id"])
+        # initialization logic
         frame = PokemonEnvironment.grab_frame(self)
         game_area = PokemonEnvironment.game_area(self)
 
         reward = 0.0  # Initialize reward as 0
         distance = 0
-        
+        # ========== DISTANCE LOGIC ==========  
         # Calculate distance traveled if start_location is set for each map 
         if self.start_location[self.loc["map_id"]]:
             start_x, start_y = self.start_location[self.loc["map_id"]]
             current_x, current_y = self.loc["x"], self.loc["y"]
             distance = np.sqrt((current_x - start_x) ** 2 + (current_y - start_y) ** 2)
+
+        # distance += self.cumulative_distance # Add cumulative distance
 
         # calculate location and map rewards
         reward += self.check_distance_rewards(distance)
@@ -112,10 +113,10 @@ class PokemonBrock(PokemonEnvironment):
         reward += self.check_pokemon_rewards(frame) # Calculate Pokemon related rewards
         if self.in_battle: reward += self.battle_rewards(game_area) # Calculate battle rewards if in battle
 
-        # ========== UPDATE LOGIC ==========
+        # ========== UPDATE LOGIC ========== 
         # Update the previous distance and location
         self.prev_distance = distance
-        self.previous_location = self.loc
+        self.prev_loc = self.loc
         self.prev_state = self.current_state
         
         return reward
@@ -137,12 +138,14 @@ class PokemonBrock(PokemonEnvironment):
         self.discovered_locations_episode.clear()
         self.discovered_maps_episode.clear()
         self.seen_pokemon_episode = 0
-        print(f"max distance: {self.max_dist[self.loc['map_id']]}")
+        self.cumulative_distance = 0  # Reset cumulative distance for the new episode
         self.max_dist_episode = np.zeros(248) # reset all max distances this episode 
 
     def check_distance_rewards(self, distance):
         reward = 0
         if self.prev_distance > 0:
+            if distance == self.prev_distance:
+                reward -= 10.0 # penalise stationary
             if distance > self.max_dist[self.loc["map_id"]]:
                 reward += distance
                 self.max_dist[self.loc["map_id"]] = distance
@@ -152,22 +155,14 @@ class PokemonBrock(PokemonEnvironment):
     
     def check_map_rewards(self, map):
         reward = 0
-        if map not in self.discovered_maps:
+        if self.prev_loc:
+            if self.loc["map_id"] != self.prev_loc["map_id"]:
+                print("Changed map.")
+                self.cumulative_distance += self.prev_distance # update cumulative distance when changing maps
+        if map not in self.discovered_maps and map != 40:
             print(f"Discovered {pkc.get_map_location(map)}!")
             reward += 100.0 * len(self.discovered_maps)
             self.discovered_maps.add(map)
-        return reward
-
-    def check_map_swap(self, map_loc):
-        reward = 0
-        # Penalize swapping between the same two maps
-        if len(self.previous_locations) >= 3:
-            first_map = self.previous_locations[0][3]
-            second_map = self.previous_locations[1][3]  # Get map_id from two steps ago
-            third_map = self.previous_locations[2][3]  # Get map_id from the previous step
-            if first_map == third_map and first_map != second_map:
-                reward -= 100.0  # Penalize for swapping maps back and forth
-                print("Swapping between the same two maps detected")
         return reward
     
     def check_pokemon_rewards(self, frame):
