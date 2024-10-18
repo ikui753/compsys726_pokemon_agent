@@ -1,5 +1,6 @@
 from functools import cached_property
 import numpy as np
+import torch
 from pyboy.utils import WindowEvent
 from pyboy_environment.environments.pokemon.pokemon_environment import PokemonEnvironment
 from pyboy_environment.environments.pokemon import pokemon_constants as pkc
@@ -64,33 +65,17 @@ class PokemonBrock(PokemonEnvironment):
     def _get_state(self) -> np.ndarray:
         # Retrieve the current game state
         game_stats = self._generate_game_stats()
-        self.current_state = game_stats 
+        game_area = np.array(PokemonEnvironment.game_area(self))
+        game_area = self.process_game_area(game_area) # process game area and shape correctly for model
         self.loc = game_stats["location"]
-        # get map number
         map_loc = self.loc["map_id"]
+        self.current_state = game_stats 
+
         # If the start_location is None (first discovery of a new map), set it
         if self.start_location[map_loc] is None:
             self.start_location[map_loc] = (self.loc["x"], self.loc["y"])
 
-        # Compute Euclidean distance from the start location
-        if self.start_location[map_loc]:
-            start_x, start_y = self.start_location[map_loc]
-            current_x, current_y = self.loc["x"], self.loc["y"]
-            distance = np.sqrt((current_x - start_x) ** 2 + (current_y - start_y) ** 2)
-        else:
-            distance = 0.0  # Default to 0 if there's no start location
-
-        # Convert game_stats to a flat list or array and prepend the distance
-        state_array = [
-            distance, # distance from start
-            map_loc, # map location ie OAK'S LAB, PALLETOWN
-            self.in_battle, # battle status
-            # game_stats["seen_pokemon"], # seen pokemon here
-            # self.loc["x"],
-            # self.loc["y"]
-        ]
-        
-        return state_array
+        return game_area
 
     def _calculate_reward(self, new_state: dict) -> float:
         # initialization logic
@@ -134,7 +119,7 @@ class PokemonBrock(PokemonEnvironment):
         return False
 
     def _check_if_truncated(self, game_stats: dict) -> bool:
-        if self.steps >= 2000:
+        if self.steps >= 1000:
             self.reset_episode()
             return True
         return False
@@ -273,3 +258,27 @@ class PokemonBrock(PokemonEnvironment):
                 reward += 10000
             
         return reward;
+
+
+        # Convert to a PyTorch tensor, ensure it's float32, and add a batch dimension
+    def process_game_area(self, game_area):
+        while game_area.size > 256:
+            game_area = game_area[1:-1, 1:-1]  # Remove first and last row, first and last column
+
+        flattened_area = game_area.flatten()  # Flatten the existing game_area
+
+        # If the flattened area has less than 256 elements, pad with zeros
+        if flattened_area.size < 256:
+            padding = np.zeros(256 - flattened_area.size, dtype=flattened_area.dtype)
+            # Concatenate the flattened area with padding
+            combined = np.concatenate((flattened_area, padding))
+        else:
+            combined = flattened_area
+
+        combined = np.array(combined, dtype=np.float32)  # Correctly create the array
+
+        # Convert to PyTorch tensor and add batch dimension (shape 1, 256)
+        return combined # torch.from_numpy(combined) #.unsqueeze(0)  # Shape will be (1, 256)
+
+
+        
