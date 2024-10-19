@@ -139,11 +139,9 @@ class PokemonBrock(PokemonEnvironment):
             prev_loc_tuple = (prev_loc["map_id"], prev_loc["x"], prev_loc["y"])
             if loc_tuple not in self.discovered_locations:
                 self.discovered_locations.add(loc_tuple)
-                reward += 1.0 # quality of new loc determined by distance
+                reward += distance # quality of new loc determined by distance
                 if distance > self.max_dist[self.loc["map_id"]]:
                     reward += distance # double reward if new loc is beyond max dist
-            elif loc_tuple != prev_loc_tuple:
-                reward += 1.0
             elif loc_tuple == prev_loc_tuple:
                 reward -= 1.0 # if stuck at same location
         return reward
