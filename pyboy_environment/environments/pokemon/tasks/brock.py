@@ -18,7 +18,7 @@ class PokemonBrock(PokemonEnvironment):
         self.discovered_maps = set()
         self.discovered_maps_episode = set()
         self.start_location = [None] * 248  # Track the start location of each map/ room
-        self.prev_loc = []  # Track the previous location
+        self.prev_loc = None  # Track the previous location
         self.max_dist_episode = np.zeros(248)  # Record max distance per map/ room
         self.max_dist = np.zeros(248)          # Record max distance per map/ room
         self.prev_distance = 0
@@ -65,7 +65,7 @@ class PokemonBrock(PokemonEnvironment):
     def _get_state(self) -> np.ndarray:
         # Retrieve the current game state
         game_stats = self._generate_game_stats()
-        game_area = np.array(PokemonEnvironment.game_area(self))
+        game_area = np.array(self.game_area())
         game_area = self.process_game_area(game_area) # process game area and shape correctly for model
         self.loc = game_stats["location"]
         map_loc = self.loc["map_id"]
@@ -100,7 +100,7 @@ class PokemonBrock(PokemonEnvironment):
             reward += self.battle_rewards(game_area) # Calculate battle rewards if in battle
             reward += self.xp_rewards()
         else:
-            reward += self.check_distance_rewards(distance)
+            reward += self.check_loc_rewards(distance, self.loc, self.prev_loc)
             reward += self.check_map_rewards(self.loc["map_id"])
             reward += self.check_pokemon_rewards(frame) # Calculate Pokemon related rewards
 
@@ -126,23 +126,26 @@ class PokemonBrock(PokemonEnvironment):
     
     def reset_episode(self):
         print("resetting episode")
-        self.discovered_locations_episode.clear()
-        self.discovered_maps_episode.clear()
+        self.discovered_locations.clear()
+        self.discovered_maps.clear()
         self.seen_pokemon_episode = 0
-        self.cumulative_distance = 0  # Reset cumulative distance for the new episode
-        self.max_dist_episode = np.zeros(248) # reset all max distances this episode 
+        self.max_dist = np.zeros(248) # reset all max distances this episode 
         self.in_battle = False
 
-    def check_distance_rewards(self, distance):
+    def check_loc_rewards(self, distance, loc, prev_loc):
         reward = 0
-        if self.prev_distance > 0:
-            if distance == self.prev_distance:
-                reward -= 10.0 # penalise stationary
-            if distance > self.max_dist[self.loc["map_id"]]:
-                reward += distance
-                self.max_dist[self.loc["map_id"]] = distance
-            if distance > self.prev_distance:
-                reward += distance - self.prev_distance  # Reward for the increased distance
+        loc_tuple = (loc["map_id"], loc["x"], loc["y"])
+        if prev_loc:
+            prev_loc_tuple = (prev_loc["map_id"], prev_loc["x"], prev_loc["y"])
+            if loc_tuple not in self.discovered_locations:
+                self.discovered_locations.add(loc_tuple)
+                reward += 1.0 # quality of new loc determined by distance
+                if distance > self.max_dist[self.loc["map_id"]]:
+                    reward += distance # double reward if new loc is beyond max dist
+            elif loc_tuple != prev_loc_tuple:
+                reward += 1.0
+            elif loc_tuple == prev_loc_tuple:
+                reward -= 1.0 # if stuck at same location
         return reward
     
     def check_map_rewards(self, map):
@@ -153,7 +156,7 @@ class PokemonBrock(PokemonEnvironment):
                 self.cumulative_distance += self.prev_distance # update cumulative distance when changing maps
         if map not in self.discovered_maps and map != 40:
             print(f"Discovered {pkc.get_map_location(map)}!")
-            reward += 100.0 * len(self.discovered_maps)
+            reward += 1000.0 * (len(self.discovered_maps) + 1)
             self.discovered_maps.add(map)
         return reward
     
