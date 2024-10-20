@@ -89,7 +89,8 @@ class PokemonBrock(PokemonEnvironment):
         if self.start_location[self.loc["map_id"]]:
             start_x, start_y = self.start_location[self.loc["map_id"]]
             current_x, current_y = self.loc["x"], self.loc["y"]
-            distance = np.sqrt((current_x - start_x) ** 2 + (current_y - start_y) ** 2)
+            # distance = np.sqrt((current_x - start_x) ** 2 + (current_y - start_y) ** 2)
+            distance = abs(current_x-start_x) + abs(current_y-start_y)
 
         # distance += self.cumulative_distance # Add cumulative distance
         if self.prev_distance > 0 and distance != self.prev_distance and self.in_battle == True: 
@@ -100,9 +101,10 @@ class PokemonBrock(PokemonEnvironment):
             reward += self.battle_rewards(game_area) # Calculate battle rewards if in battle
             reward += self.xp_rewards()
         else:
-            reward += self.check_loc_rewards(distance, self.loc, self.prev_loc)
-            reward += self.check_map_rewards(self.loc["map_id"])
-            reward += self.check_pokemon_rewards(frame) # Calculate Pokemon related rewards
+            reward += self.check_distance_rewards(distance)
+            # reward += self.check_loc_rewards(distance, self.loc, self.prev_loc)
+            # reward += self.check_map_rewards(self.loc["map_id"])
+            # reward += self.check_pokemon_rewards(frame) # Calculate Pokemon related rewards
 
         # ========== UPDATE LOGIC ========== 
         # Update the previous distance and location
@@ -132,6 +134,16 @@ class PokemonBrock(PokemonEnvironment):
         self.max_dist = np.zeros(248) # reset all max distances this episode 
         self.in_battle = False
 
+    def check_distance_rewards(self, distance):
+        reward = 0
+        if self.prev_distance > 0:
+            if distance > self.max_dist[self.loc["map_id"]]:
+                reward += distance
+                self.max_dist[self.loc["map_id"]] = distance
+            if distance > self.prev_distance:
+                reward += distance - self.prev_distance  # Reward for the increased distance
+        return reward
+    
     def check_loc_rewards(self, distance, loc, prev_loc):
         reward = 0
         loc_tuple = (loc["map_id"], loc["x"], loc["y"])
@@ -262,6 +274,7 @@ class PokemonBrock(PokemonEnvironment):
 
 
         # Convert to a PyTorch tensor, ensure it's float32, and add a batch dimension
+    
     def process_game_area(self, game_area):
         while game_area.size > 256:
             game_area = game_area[1:-1, 1:-1]  # Remove first and last row, first and last column
