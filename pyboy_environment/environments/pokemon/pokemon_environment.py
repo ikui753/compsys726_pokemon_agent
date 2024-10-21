@@ -7,6 +7,7 @@ from pyboy.utils import WindowEvent
 
 from pyboy_environment.environments.pyboy_environment import PyboyEnvironment
 from pyboy_environment.environments.pokemon import pokemon_constants as pkc
+import torch
 
 
 class PokemonEnvironment(PyboyEnvironment):
@@ -60,8 +61,13 @@ class PokemonEnvironment(PyboyEnvironment):
         )
 
     def _run_action_on_emulator(self, action_array: np.ndarray) -> None:
-        action = action_array[0]
-        action = min(action, 0.99)
+        if isinstance(action_array, torch.Tensor):
+            action = action_array.item()
+        elif isinstance(action_array, int):
+            action = action_array
+        else:
+            action = action_array[0] # if action is an array
+            action = min(action, 0.99)
 
         # Continuous Action is a float between 0 - 1 from Value based methods
         # We need to convert this to an action that the emulator can understand
