@@ -121,7 +121,7 @@ class PokemonBrock(PokemonEnvironment):
         return False
 
     def _check_if_truncated(self, game_stats: dict) -> bool:
-        if self.steps >= 2000:
+        if self.steps >= 1000:
             self.reset_episode()
             return True
         return False
@@ -241,14 +241,14 @@ class PokemonBrock(PokemonEnvironment):
     [381, 378, 378, 378, 378, 378, 378, 378, 378, 378, 378, 378, 378, 378, 378, 378, 378, 378, 378, 382]
 ])
         
-        # print(game_area[-7:, :])
-        # input("pause")
         if np.array_equal(game_area[-7:, :], fight_menu):
+            # input("pause")
             print("on fight menu")
             reward += 100.0
             
         elif np.array_equal(game_area[-7:, :], attack_menu):
             print("choosing attack")
+            # input("pause")
             reward += 200.0
 
         elif np.array_equal(game_area[-7:, :], tackle_state):
@@ -271,9 +271,6 @@ class PokemonBrock(PokemonEnvironment):
                 reward += 10000
             
         return reward;
-
-
-        # Convert to a PyTorch tensor, ensure it's float32, and add a batch dimension
     
     def process_game_area(self, game_area):
         while game_area.size > 256:
