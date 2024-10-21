@@ -99,12 +99,12 @@ class PokemonBrock(PokemonEnvironment):
         # calculate location and map rewards
         if self.in_battle: 
             reward += self.battle_rewards(game_area) # Calculate battle rewards if in battle
-            reward += self.xp_rewards()
         else:
             reward += self.check_distance_rewards(distance)
             # reward += self.check_loc_rewards(distance, self.loc, self.prev_loc)
             reward += self.check_map_rewards(self.loc["map_id"])
-            # reward += self.check_pokemon_rewards(frame) # Calculate Pokemon related rewards
+            reward += self.xp_rewards()
+            reward += self.check_pokemon_rewards(frame) # Calculate Pokemon related rewards
 
         # ========== UPDATE LOGIC ========== 
         # Update the previous distance and location
@@ -121,7 +121,7 @@ class PokemonBrock(PokemonEnvironment):
         return False
 
     def _check_if_truncated(self, game_stats: dict) -> bool:
-        if self.steps >= 1000:
+        if self.steps >= 2000:
             self.reset_episode()
             return True
         return False
@@ -158,26 +158,25 @@ class PokemonBrock(PokemonEnvironment):
                 reward -= 1.0 # if stuck at same location
         return reward
     
-    def check_map_rewards(self, map):
+    def check_map_rewards(self, current_map):
         reward = 0
         if self.prev_loc:
             if self.loc["map_id"] != self.prev_loc["map_id"]:
                 print("Changed map.")
-                self.cumulative_distance += self.prev_distance # update cumulative distance when changing maps
-        if map not in self.discovered_maps and map != 40:
-            print(f"Discovered {pkc.get_map_location(map)}!")
+        if current_map not in self.discovered_maps and current_map not in {37, 38, 39, 40, 41}:
+            print(f"Discovered {pkc.get_map_location(current_map)}!")
             reward += 1000.0 * (len(self.discovered_maps) + 1)
-            self.discovered_maps.add(map)
+            self.discovered_maps.add(current_map)
         return reward
     
     def check_pokemon_rewards(self, frame):
         reward = 0
-
         # Ensure prev_state is available for comparison
         if self.prev_state:
             if self._is_grass_tile():
                 if np.all(frame == 0):
                     print("========= starting pokemon battle =========")
+                    reward += 1000.0 # reward for starting battle
                     self.in_battle = True
             # Found new Pokémon in the current state- counts unique pokemon
             if self.current_state["seen_pokemon"] > self.prev_state["seen_pokemon"]:
@@ -242,9 +241,10 @@ class PokemonBrock(PokemonEnvironment):
     [381, 378, 378, 378, 378, 378, 378, 378, 378, 378, 378, 378, 378, 378, 378, 378, 378, 378, 378, 382]
 ])
         
+        # print(game_area[-7:, :])
+        # input("pause")
         if np.array_equal(game_area[-7:, :], fight_menu):
             print("on fight menu")
-            # self.in_fight = True
             reward += 100.0
             
         elif np.array_equal(game_area[-7:, :], attack_menu):
@@ -290,8 +290,4 @@ class PokemonBrock(PokemonEnvironment):
             combined = flattened_area
 
         combined = np.array(combined, dtype=np.float32)  # Correctly create the array
-
-        input("pause")
-        print(combined)
-        # Convert to PyTorch tensor and add batch dimension (shape 1, 256)
-        return combined # torch.from_numpy(combined) #.unsqueeze(0)  # Shape will be (1, 256)
+        return combined # return numpy array to be converted to tensor later

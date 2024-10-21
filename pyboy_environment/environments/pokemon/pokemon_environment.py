@@ -64,6 +64,8 @@ class PokemonEnvironment(PyboyEnvironment):
         # If action_array is a PyTorch tensor, extract its value using .item()
         if isinstance(action_array, torch.Tensor):
             action = action_array.item()  # Extract the scalar value from the tensor
+        elif isinstance(action_array, int):
+            action = action_array
         else:
             action = action_array[0]  # If action_array is a NumPy array or list
 
