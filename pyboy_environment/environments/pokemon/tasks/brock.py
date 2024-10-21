@@ -291,5 +291,7 @@ class PokemonBrock(PokemonEnvironment):
 
         combined = np.array(combined, dtype=np.float32)  # Correctly create the array
 
+        input("pause")
+        print(combined)
         # Convert to PyTorch tensor and add batch dimension (shape 1, 256)
         return combined # torch.from_numpy(combined) #.unsqueeze(0)  # Shape will be (1, 256)
