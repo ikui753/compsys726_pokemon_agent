@@ -3,6 +3,7 @@ from functools import cached_property
 from abc import abstractmethod
 
 import numpy as np
+import torch
 from pyboy.utils import WindowEvent
 
 from pyboy_environment.environments.pyboy_environment import PyboyEnvironment
@@ -60,7 +61,12 @@ class PokemonEnvironment(PyboyEnvironment):
         )
 
     def _run_action_on_emulator(self, action_array: np.ndarray) -> None:
-        action = action_array[0]
+        # If action_array is a PyTorch tensor, extract its value using .item()
+        if isinstance(action_array, torch.Tensor):
+            action = action_array.item()  # Extract the scalar value from the tensor
+        else:
+            action = action_array[0]  # If action_array is a NumPy array or list
+
         action = min(action, 0.99)
 
         # Continuous Action is a float between 0 - 1 from Value based methods

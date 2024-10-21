@@ -103,7 +103,7 @@ class PokemonBrock(PokemonEnvironment):
         else:
             reward += self.check_distance_rewards(distance)
             # reward += self.check_loc_rewards(distance, self.loc, self.prev_loc)
-            # reward += self.check_map_rewards(self.loc["map_id"])
+            reward += self.check_map_rewards(self.loc["map_id"])
             # reward += self.check_pokemon_rewards(frame) # Calculate Pokemon related rewards
 
         # ========== UPDATE LOGIC ========== 
@@ -293,6 +293,3 @@ class PokemonBrock(PokemonEnvironment):
 
         # Convert to PyTorch tensor and add batch dimension (shape 1, 256)
         return combined # torch.from_numpy(combined) #.unsqueeze(0)  # Shape will be (1, 256)
-
-
-        
