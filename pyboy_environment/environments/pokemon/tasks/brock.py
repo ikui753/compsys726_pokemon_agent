@@ -148,7 +148,7 @@ class PokemonBrock(PokemonEnvironment):
         return False
 
     def _check_if_truncated(self, game_stats: dict) -> bool:
-        if self.steps >= 9000:
+        if self.steps >= 14900:
             self.reset_episode()
             return True
         return False
@@ -319,16 +319,16 @@ class PokemonBrock(PokemonEnvironment):
         # input("pause")
         # print(game_area[-7:, :])
 
-        if np.array_equal(game_area[-7:, :], fight_menu):
-            print("on fight menu")
-            # self.in_fight = True
-            reward += 100.0
+        # if np.array_equal(game_area[-7:, :], fight_menu):
+        #     print("on fight menu")
+        #     # self.in_fight = True
+        #     reward += 100.0
             
-        elif np.array_equal(game_area[-7:, :], fight_state):
-            print("on attack menu")
-            reward += 200.0
+        # elif np.array_equal(game_area[-7:, :], fight_state):
+        #     print("on attack menu")
+        #     reward += 200.0
 
-        elif np.array_equal(game_area[-7:, :], tackle_state):
+        if np.array_equal(game_area[-7:, :], tackle_state):
             print("tackle action")
             reward += 300.0
             
@@ -336,13 +336,13 @@ class PokemonBrock(PokemonEnvironment):
             print("on flee menu")
             reward -= 100.0
 
-        elif np.array_equal(game_area[-7:, :], item_menu):
-            print("on item menu")
-            reward -= 100.0
+        # elif np.array_equal(game_area[-7:, :], item_menu):
+        #     print("on item menu")
+        #     reward -= 100.0
 
-        elif np.array_equal(game_area[-7:, :], pokemon_select):
-            print("on pokemon select menu")
-            reward -= 100.0
+        # elif np.array_equal(game_area[-7:, :], pokemon_select):
+        #     print("on pokemon select menu")
+        #     reward -= 100.0
 
         return reward
 
