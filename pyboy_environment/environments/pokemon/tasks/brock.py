@@ -29,7 +29,7 @@ class PokemonBrock(PokemonEnvironment):
         self.seen_pokemon = 0
         self.in_battle = False
         self.in_fight = False
-        self.next_tick_pause = False
+        self.next_tick_pause = False # for video recording purposes 
 
         valid_actions: list[WindowEvent] = [
             WindowEvent.PRESS_ARROW_DOWN,
@@ -62,6 +62,10 @@ class PokemonBrock(PokemonEnvironment):
         )
 
     def _get_state(self) -> np.ndarray:
+        if self.next_tick_pause:
+            input("pause")
+            self.next_tick_pause = False
+        
         # Retrieve the current game state
         game_stats = self._generate_game_stats()
         # game_area = np.array(self.game_area())
