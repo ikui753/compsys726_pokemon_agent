@@ -29,6 +29,7 @@ class PokemonBrock(PokemonEnvironment):
         self.seen_pokemon = 0
         self.in_battle = False
         self.in_fight = False
+        self.next_tick_pause = False
 
         valid_actions: list[WindowEvent] = [
             WindowEvent.PRESS_ARROW_DOWN,
@@ -63,6 +64,8 @@ class PokemonBrock(PokemonEnvironment):
     def _get_state(self) -> np.ndarray:
         # Retrieve the current game state
         game_stats = self._generate_game_stats()
+        # game_area = np.array(self.game_area())
+        # game_area = self.process_game_area(game_area) # process game area and shape correctly for model
         self.current_state = game_stats 
         self.current_location = game_stats["location"]
         # get map number
@@ -83,14 +86,12 @@ class PokemonBrock(PokemonEnvironment):
         state_array = [
             distance, # distance from start
             map_loc, # map location ie OAK'S LAB, PALLETOWN
-            # game_stats["seen_pokemon"], # seen pokemon here
-            # self.current_location["x"],
-            # self.current_location["y"]
         ]
         
-        return state_array
+        return state_array # np.concatenate((state_array, game_area), axis=0)
 
     def _calculate_reward(self, new_state: dict) -> float:
+        
         # ========== LOCATION LOGIC ==========  
         # Get the current location and turn into a tuple
         map_loc = self.current_location["map_id"]
@@ -147,7 +148,7 @@ class PokemonBrock(PokemonEnvironment):
         return False
 
     def _check_if_truncated(self, game_stats: dict) -> bool:
-        if self.steps >= 1000:
+        if self.steps >= 9000:
             self.reset_episode()
             return True
         return False
@@ -232,6 +233,7 @@ class PokemonBrock(PokemonEnvironment):
             if self._is_grass_tile():
                 if np.all(frame == 0):
                     print("========= starting pokemon battle =========")
+                    reward += 1000
                     self.in_battle = True
             # Found new Pokémon in the current state- counts unique pokemon
             if self.current_state["seen_pokemon"] > self.prev_state["seen_pokemon"]:
@@ -295,7 +297,28 @@ class PokemonBrock(PokemonEnvironment):
     [380, 180, 178, 164, 163, 383, 147, 128, 130, 138, 139, 132, 231, 383, 383, 383, 383, 383, 383, 380],
     [381, 378, 378, 378, 378, 378, 378, 378, 378, 378, 378, 378, 378, 378, 378, 378, 378, 378, 378, 382]
 ])
+        item_menu = np.array([
+    [383, 311, 318, 325, 332, 339, 346, 353, 383, 367, 374, 374, 374, 374, 374, 374, 374, 374, 375, 383],
+    [377, 378, 378, 378, 378, 378, 378, 378, 377, 378, 378, 378, 378, 378, 378, 378, 378, 378, 378, 379],
+    [380, 383, 383, 383, 383, 383, 383, 383, 380, 383, 383, 383, 383, 383, 383, 383, 383, 383, 383, 380],
+    [380, 383, 383, 383, 383, 383, 383, 383, 380, 383, 133, 136, 134, 135, 147, 383, 225, 226, 383, 380],
+    [380, 383, 383, 383, 383, 383, 383, 383, 380, 383, 383, 383, 383, 383, 383, 383, 383, 383, 383, 380],
+    [380, 383, 383, 383, 383, 383, 383, 383, 380, 237, 136, 147, 132, 140, 383, 383, 145, 148, 141, 380],
+    [381, 378, 378, 378, 378, 378, 378, 378, 381, 378, 378, 378, 378, 378, 378, 378, 378, 378, 378, 382]
+])
+        pokemon_select = np.array([
+    [383, 311, 318, 325, 332, 339, 346, 353, 383, 367, 374, 374, 374, 374, 374, 374, 374, 374, 375, 383],
+    [377, 378, 378, 378, 378, 378, 378, 378, 377, 378, 378, 378, 378, 378, 378, 378, 378, 378, 378, 379],
+    [380, 383, 383, 383, 383, 383, 383, 383, 380, 383, 383, 383, 383, 383, 383, 383, 383, 383, 383, 380],
+    [380, 383, 383, 383, 383, 383, 383, 383, 380, 383, 133, 136, 134, 135, 147, 237, 225, 226, 383, 380],
+    [380, 383, 383, 383, 383, 383, 383, 383, 380, 383, 383, 383, 383, 383, 383, 383, 383, 383, 383, 380],
+    [380, 383, 383, 383, 383, 383, 383, 383, 380, 383, 136, 147, 132, 140, 383, 383, 145, 148, 141, 380],
+    [381, 378, 378, 378, 378, 378, 378, 378, 381, 378, 378, 378, 378, 378, 378, 378, 378, 378, 378, 382]
+])
         
+        # input("pause")
+        # print(game_area[-7:, :])
+
         if np.array_equal(game_area[-7:, :], fight_menu):
             print("on fight menu")
             # self.in_fight = True
@@ -312,6 +335,15 @@ class PokemonBrock(PokemonEnvironment):
         elif np.array_equal(game_area[-7:, :], flee_state):
             print("on flee menu")
             reward -= 100.0
+
+        elif np.array_equal(game_area[-7:, :], item_menu):
+            print("on item menu")
+            reward -= 100.0
+
+        elif np.array_equal(game_area[-7:, :], pokemon_select):
+            print("on pokemon select menu")
+            reward -= 100.0
+
         return reward
 
     def xp_rewards(self):
@@ -322,13 +354,22 @@ class PokemonBrock(PokemonEnvironment):
 
             if current_xp > prev_xp:
                 print("========== Gained XP! ==========")
-                input("pause")
-                reward += 10000
-
-            # # Reward for XP increase
-            # xp_diff = current_xp - prev_xp
-            # if xp_diff > 0:
-            #     print("========== xp gained! ==========")
-            #     reward += xp_diff * 100  # Linear reward proportional to the XP increase
-            
+                reward += 10000            
         return reward;
+
+    def process_game_area(self, game_area):
+        while game_area.size > 256:
+            game_area = game_area[1:-1, 1:-1]  # Remove first and last row, first and last column
+
+        flattened_area = game_area.flatten()  # Flatten the existing game_area
+
+        # If the flattened area has less than 256 elements, pad with zeros
+        if flattened_area.size < 256:
+            padding = np.zeros(256 - flattened_area.size, dtype=flattened_area.dtype)
+            # Concatenate the flattened area with padding
+            combined = np.concatenate((flattened_area, padding))
+        else:
+            combined = flattened_area
+
+        combined = np.array(combined, dtype=np.float32)  # Correctly create the array
+        return combined # return numpy array to be converted to tensor later
