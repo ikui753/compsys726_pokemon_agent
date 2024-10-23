@@ -30,6 +30,8 @@ class PokemonBrock(PokemonEnvironment):
         self.in_battle = False
         self.in_fight = False
         self.next_tick_pause = False # for video recording purposes 
+        self.first_hp_read = False
+        self.first_enemy_hp_read = False
 
         valid_actions: list[WindowEvent] = [
             WindowEvent.PRESS_ARROW_DOWN,
@@ -86,16 +88,22 @@ class PokemonBrock(PokemonEnvironment):
         else:
             distance = 0.0  # Default to 0 if there's no start location
 
-        # Convert game_stats to a flat list or array and prepend the distance
-        state_array = [
-            distance, # distance from start
-            map_loc, # map location ie OAK'S LAB, PALLETOWN
-        ]
+        if self.in_battle:
+            hp = self.categorize_hp(self._read_m(0xD015)) # split this into four states to reduce state space
+            enemy_hp = self.categorize_hp(self._read_m(0xCFE7)) # split this into four states to reduce state space
+            state_array = [
+                hp,
+                enemy_hp,
+            ]
+        else:
+            state_array = [
+                distance, # distance from start
+                map_loc, # map location ie OAK'S LAB, PALLETOWN
+            ]
         
         return state_array # np.concatenate((state_array, game_area), axis=0)
 
     def _calculate_reward(self, new_state: dict) -> float:
-        
         # ========== LOCATION LOGIC ==========  
         # Get the current location and turn into a tuple
         map_loc = self.current_location["map_id"]
@@ -111,10 +119,14 @@ class PokemonBrock(PokemonEnvironment):
             start_x, start_y = self.start_location[map_loc]
             current_x, current_y = self.current_location["x"], self.current_location["y"]
             distance = np.sqrt((current_x - start_x) ** 2 + (current_y - start_y) ** 2)
+        
+        if self.previous_locations:
+            if self.current_location != self.previous_locations[0]:
+                if self.in_battle:
+                    print("exiting battle")
+                    self.in_battle = False
 
-        # calculate location and map rewards
         reward += self.check_location_rewards(map_loc, location_tuple, distance)
-
         # Penalize swapping between the same two maps
         reward += self.check_map_swap(map_loc)
 
@@ -123,17 +135,7 @@ class PokemonBrock(PokemonEnvironment):
 
         if self.in_battle:
             reward += self.battle_rewards(game_area)
-
-        if self.in_fight:
-            print(f"start: {self.start_location[map_loc]}")
-            print(f"current: {self.current_location}")
-            print(distance)
-            print(f"max dist {map_loc}: {self.max_dist_episode[map_loc]}")
-            print(f"{game_area}")
-            print(frame)
-            input("pause")
             
-
         # ========== XP Rewards ==========
         self.xp_rewards()
 
@@ -142,7 +144,6 @@ class PokemonBrock(PokemonEnvironment):
         self.prev_distance = distance
         self.previous_location = self.current_location
         self.prev_state = self.current_state
-        
         return reward
 
     def _check_if_done(self, game_stats: dict[str, any]) -> bool:
@@ -172,7 +173,6 @@ class PokemonBrock(PokemonEnvironment):
             # penalise for the same position, except when on grass
             if self.current_location == self.previous_locations[0] and self._is_grass_tile() == False:
                 reward -= 5.0
-        
         # Handle new map discovery (across episodes)
         elif self.current_location["map"] not in self.discovered_maps_episode or self.found_map:
             if not self.found_map:
@@ -231,7 +231,6 @@ class PokemonBrock(PokemonEnvironment):
     
     def check_pokemon_rewards(self, frame):
         reward = 0
-
         # Ensure prev_state is available for comparison
         if self.prev_state:
             if self._is_grass_tile():
@@ -335,6 +334,9 @@ class PokemonBrock(PokemonEnvironment):
         if np.array_equal(game_area[-7:, :], tackle_state):
             print("tackle action")
             reward += 300.0
+
+        # if enemy_hp1 > enemy_hp:
+        #     reward += 1000.0
             
         elif np.array_equal(game_area[-7:, :], flee_state):
             print("on flee menu")
@@ -348,9 +350,19 @@ class PokemonBrock(PokemonEnvironment):
         #     print("on pokemon select menu")
         #     reward -= 100.0
 
-        enemy_hp1 = self._read_m(0xCFE7)
-        print(enemy_hp1)
         return reward
+    
+    def categorize_hp(self, hp_value: int) -> int:
+        max_hp = 20
+        # Divide HP into four discrete states based on max_hp
+        if hp_value <= max_hp * 0.25:  # 0-25% of max_hp
+            return 0  # Low health
+        elif hp_value <= max_hp * 0.5:  # 26-50% of max_hp
+            return 1  # Medium-low health
+        elif hp_value <= max_hp * 0.75:  # 51-75% of max_hp
+            return 2  # Medium-high health
+        else:  # 76-100% of max_hp
+            return 3  # High health
 
     def xp_rewards(self):
         reward = 0
