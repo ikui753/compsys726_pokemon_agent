@@ -348,6 +348,8 @@ class PokemonBrock(PokemonEnvironment):
         #     print("on pokemon select menu")
         #     reward -= 100.0
 
+        enemy_hp1 = self._read_m(0xCFE7)
+        print(enemy_hp1)
         return reward
 
     def xp_rewards(self):
